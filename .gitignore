@@ -27,3 +27,6 @@ api/data/
 
 # Playwright
 api/.playwright/
+
+# TypeScript build info
+web/tsconfig.tsbuildinfo
