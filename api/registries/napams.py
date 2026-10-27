@@ -1,8 +1,17 @@
 """NAPAMS live portal lookup (food, water, veterinary, general products).
 
-Portal: https://registration.nafdac.gov.ng. There is no API; the public "verify a product"
-forms are scraped with Playwright. The DOM, selectors, and flow are UNKNOWN and must be
-re-tuned against the live portal (see NOTES.md). The contract that must hold regardless:
+Portal: https://registration.nafdac.gov.ng. There is no public API. The "Verify Products"
+form is a single form on the home page (anchor #verify) that POSTs to /Home/VerifyProduct.
+
+Verified against the live HTML (fetched 2026-10-27):
+- Input: id="CertificateNumber" name="CertificateNumber" (the NAFDAC number).
+- Submit button: class "g-recaptcha btn btn-primary" with data-callback="onSubmit".
+- The form carries a hidden __RequestVerificationToken (anti-forgery) and a hidden
+  captchaToken filled by Google reCAPTCHA v3 (invisible, sitekey 6LcG85gs...).
+
+Because the form is reCAPTCHA-v3 protected and requires a valid token plus an anti-forgery
+token, automated submission is not reliably possible. Per the contract below, a captcha is
+CHECK_INCOMPLETE, never NOT_FOUND.
 
 - Every lookup returns exactly one of FOUND / SEARCHED_NOT_FOUND / CHECK_INCOMPLETE.
 - Network errors, captchas, layout changes, and timeouts are CHECK_INCOMPLETE, never
@@ -19,18 +28,18 @@ from .client import RegistryClient
 from .models import LookupResult, RegistryCategory, RegistryRecord
 from .nrn import normalise_nrn
 
-# Placeholder selectors; re-tune against the live portal. Each is tried in order.
-_VERIFY_URL = "/verify"
-_NRN_INPUT_SELECTORS = [
-    'input[name="nrn"]',
-    'input[name="registration_number"]',
-    'input[id*="reg"]',
+# Verified against the live home page (see docstring).
+_VERIFY_URL = "/"
+_CERT_INPUT_SELECTORS = [
+    'input[name="CertificateNumber"]',
+    "#CertificateNumber",
 ]
 _SUBMIT_SELECTORS = [
-    'button[type="submit"]',
-    'input[type="submit"]',
+    '#verify-form button[type="submit"]',
+    "button.g-recaptcha",
+    "button:has-text('Verify')",
 ]
-_NOT_FOUND_MARKERS = ["not found", "no record", "no result", "nothing found", "invalid"]
+_NOT_FOUND_MARKERS = ["not found", "no record", "no result", "nothing found"]
 
 
 class NapamsClient(RegistryClient):
@@ -61,6 +70,9 @@ class NapamsClient(RegistryClient):
                     page.set_default_timeout(self.timeout_ms)
                     page.goto(self.settings.napams_base_url.rstrip("/") + _VERIFY_URL)
 
+                    if self._has_captcha(page):
+                        return LookupResult.incomplete("captcha_protected", nrn=norm.canonical, source=self.name, source_url=self.settings.napams_base_url)
+
                     if not self._fill_and_submit(page, norm.canonical):
                         return LookupResult.incomplete("napams_form_layout_changed", nrn=norm.canonical, source=self.name, source_url=self.settings.napams_base_url)
 
@@ -80,8 +92,16 @@ class NapamsClient(RegistryClient):
         except Exception as exc:  # noqa: BLE001 - any failure is CHECK_INCOMPLETE
             return LookupResult.incomplete(f"napams_lookup_error: {type(exc).__name__}", nrn=norm.canonical, source=self.name, source_url=self.settings.napams_base_url)
 
+    def _has_captcha(self, page) -> bool:
+        """Detect the reCAPTCHA-v3 guard: a g-recaptcha button or a data-sitekey input."""
+        if page.locator("button.g-recaptcha").count() > 0:
+            return True
+        if page.locator("[data-sitekey]").count() > 0:
+            return True
+        return "grecaptcha" in page.content().lower()
+
     def _fill_and_submit(self, page, nrn: str) -> bool:
-        for selector in _NRN_INPUT_SELECTORS:
+        for selector in _CERT_INPUT_SELECTORS:
             locator = page.locator(selector)
             if locator.count() > 0:
                 locator.first.fill(nrn)
@@ -93,7 +113,8 @@ class NapamsClient(RegistryClient):
         return False
 
     def _parse_record(self, page) -> RegistryRecord | None:
-        # Unknown result layout; attempt a generic table/definition scrape.
+        # Result layout is UNKNOWN (the form is captcha-protected, so this path is not
+        # reachable in practice). Best-effort generic scrape.
         try:
             title = page.locator("h1, h2, .product-name").first.inner_text(timeout=5_000)
         except Exception:  # noqa: BLE001
@@ -103,7 +124,7 @@ class NapamsClient(RegistryClient):
             return None
         body = page.inner_text("body")
         return RegistryRecord(
-            nrn="",  # filled below is impossible; leave raw
+            nrn="",
             product_name=title,
             category=RegistryCategory.GENERAL,
             source="napams",
