@@ -11,6 +11,23 @@ as the build proceeds. Andrew reviews this to know what was verified vs assumed.
 - Vision-capable hosted model ids: `muse-spark-1.3` (recommended), `muse-spark-1.2`,
   `muse-spark-1.1`, `muse-wonder-1.0`. Default for `META_VISION_MODEL` is `muse-spark-1.3`.
 - Local toolchain: Python 3.12.13 available via uv, Node 22, npm 10.
+- Full pytest suite passes: 52 tests (NRN, matcher, greenbook, napams, verdict, extraction,
+  service, API). `uv run pytest -q` -> 52 passed.
+- Live server smoke test (uvicorn, real HTTP): `GET /v1/health` -> ok; `GET /v1/registry/status`
+  -> source/date/count; `POST /v1/check/fields` returns CONSISTENT_WITH_REGISTRY (with footer +
+  evidence), REGISTRY_MISMATCH, NOT_FOUND_IN_REGISTRY as expected; `POST /v1/check` (multipart
+  image) in MOCK mode extracts the fixture NRN and returns CONSISTENT_WITH_REGISTRY.
+- Eval harness runs now (`uv run python eval/run_eval.py`): 6/6 verdict agreement, 0 false
+  accusations, NRN/batch/expiry exact-match 5/6 (the misses are the deliberate null-NRN and
+  wrong-batch fixtures).
+- Web frontend builds clean: `npm run build` -> 148 kB JS, no type errors.
+
+## Not verified (could not reach from this environment)
+
+- The live Greenbook DataTables response shape (probe/fetch were written but not run against
+  the live site; see below). The parser is written against the reported DataTables layout and
+  adapts via a best-guess column map.
+- The live NAPAMS form DOM/flow (selectors are placeholders).
 
 ## Assumptions (NOT verified)
 
@@ -53,3 +70,5 @@ as the build proceeds. Andrew reviews this to know what was verified vs assumed.
 - Run `probe` against the live Greenbook site and adapt `greenbook.py` column mapping.
 - Re-tune NAPAMS Playwright selectors against the live portal.
 - Add real photos + labels.csv rows (Andrew to supply 20).
+- Wire the SAM 3.1 `preprocess` crop (milestone 2) and the public-alert parser (ALERT_MATCH).
+- Route the LLM explanation layer through `verdict/safety.is_medical_advice_request`.
