@@ -15,8 +15,8 @@ _SEPARATORS = re.compile(r"[\s\-_/]+")
 
 # A valid first group is a letter-or-digit followed by one or two digits, e.g. "A4", "04".
 _GROUP1_RE = re.compile(r"^[A-Z0-9][0-9]{1,2}$")
-# A valid second group is a run of digits.
-_GROUP2_RE = re.compile(r"^[0-9]{2,5}$")
+# A valid second group is a run of digits (real examples span 2 to 6 digits, e.g. "A4-100160").
+_GROUP2_RE = re.compile(r"^[0-9]{2,6}$")
 
 
 @dataclass(frozen=True)

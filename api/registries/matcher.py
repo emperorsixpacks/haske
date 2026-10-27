@@ -64,14 +64,21 @@ _COMPARED_FIELDS = [
 
 
 def _best_record(records: list[RegistryRecord], label: dict) -> tuple[RegistryRecord, float]:
-    """Return the record that best matches the label and its aggregate score."""
+    """Return the record that best matches the label and its aggregate score.
+
+    Fields the registry record does not carry (e.g. manufacturer is absent from the
+    Greenbook search feed) are skipped rather than scored as a mismatch.
+    """
     best: RegistryRecord | None = None
     best_score = -1.0
     for record in records:
         total = 0.0
         weight_sum = 0.0
         for field, weight in _COMPARED_FIELDS:
-            total += weight * _similarity(label.get(field), getattr(record, field, None))
+            registry_value = getattr(record, field, None)
+            if not _norm(registry_value):
+                continue
+            total += weight * _similarity(label.get(field), registry_value)
             weight_sum += weight
         score = total / weight_sum if weight_sum else 0.0
         if score > best_score:

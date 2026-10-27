@@ -18,6 +18,12 @@ def test_normalise_case_and_spaces():
     assert n.canonical == "A4-0123"
 
 
+def test_normalise_real_six_digit_nrn():
+    n = normalise_nrn("A4-100160")
+    assert n.canonical == "A4-100160"
+    assert n.valid
+
+
 def test_normalise_no_dash():
     n = normalise_nrn("045808")
     assert n.canonical == "04-5808"

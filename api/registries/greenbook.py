@@ -1,10 +1,11 @@
 """Greenbook snapshotter.
 
-Source: https://greenbook.nafdac.gov.ng (drugs, vaccines, devices, veterinary, herbals;
-NOT cosmetics or soaps). There is no official API. The public search table reportedly loads
-JSON via a DataTables GET to the site root with `X-Requested-With: XMLHttpRequest`, paged by
-`start` and `length`. This shape is UNVERIFIED: the `probe` command fetches 3 rows, prints the
-raw fields, and fails loudly if the shape differs, so the mapping here can be corrected.
+Source: https://greenbook.nafdac.gov.ng (drugs, vaccines, devices, veterinary, herbals,
+disinfectants; NOT cosmetics or soaps). There is no official API, but the public search table
+is a Laravel server-side DataTables feed: a GET to the site root with `X-Requested-With:
+XMLHttpRequest` and DataTables paging params (`start`, `length`, `draw`) returns JSON with
+`recordsTotal`, `recordsFiltered` and a `data` array of object rows. This shape is VERIFIED
+against the live site (fetched 2026-10-27); the exact row keys are below.
 """
 
 from __future__ import annotations
@@ -25,20 +26,21 @@ from .store import Store
 # Contact fields must never be persisted, even inside the raw record.
 _CONTACT_KEY_RE = re.compile(r"(email|phone|tel|mobile|fax|address|contact)", re.IGNORECASE)
 
-# Candidate column names (case-insensitive, substring) for each normalised field. The order
-# is a best guess; refine after `probe` reveals the true columns.
-_FIELD_CANDIDATES: dict[str, list[str]] = {
-    "nrn": ["registration no", "reg no", "reg. no", "registration number", "certificate number", "nrn", "regno"],
-    "product_name": ["product name", "brand name", "product", "name", "brand"],
-    "category": ["category", "product category", "type"],
-    "status": ["status", "product status"],
-    "applicant": ["applicant", "applicant name", "company"],
-    "manufacturer": ["manufacturer", "manufacturer name", "manufactured by"],
-    "active_ingredients": ["active ingredient", "active ingredients", "ingredient", "composition"],
-    "strength": ["strength", "potency", "strength of product"],
-    "form": ["form", "dosage form", "product form"],
-    "approval_date": ["approval date", "date of approval", "approved date", "registration date"],
-    "expiry_date": ["expiry date", "expiration date", "valid until", "certificate expiry"],
+# Verified exact row keys (Laravel flattens the eager-loaded relationships into both nested
+# objects and *_name / *_id fields). The NAFDAC number is the "NAFDAC" key. Manufacturer is
+# only available as manufacturer_id in this feed, not a name.
+_FIELD_KEYS: dict[str, list[str]] = {
+    "nrn": ["NAFDAC", "nrn"],
+    "product_name": ["product_name"],
+    "category": ["category_name", "product_category_name"],
+    "status": ["status"],
+    "applicant": ["applicant_name"],
+    "manufacturer": ["manufacturer_name"],
+    "active_ingredients": ["ingredient_name", "composition"],
+    "strength": ["strength"],
+    "form": ["form_name"],
+    "approval_date": ["approval_date"],
+    "expiry_date": ["expiry_date"],
 }
 
 
@@ -141,16 +143,18 @@ class GreenbookSnapshotter:
 
     def _column_value(self, row: dict, field: str) -> str | None:
         """Return a normalised string value for a field from a raw row dict."""
-        # Positional rows: keyed by a single '__row__' list; we cannot map without columns.
         if "__row__" in row:
             return None
-        candidates = _FIELD_CANDIDATES.get(field, [])
-        for key, value in row.items():
-            if key is None:
-                continue
-            key_l = str(key).lower()
-            for cand in candidates:
-                if cand in key_l:
+        keys = _FIELD_KEYS.get(field, [])
+        for key in keys:
+            if key in row:
+                return _to_text(row.get(key))
+        # Fallback: fuzzy substring match on normalised keys (underscore -> space).
+        norm_keys = {str(k).lower().replace("_", " "): v for k, v in row.items() if k is not None}
+        for key in keys:
+            wanted = key.lower().replace("_", " ")
+            for norm_key, value in norm_keys.items():
+                if wanted and wanted in norm_key:
                     return _to_text(value)
         return None
 
@@ -161,6 +165,8 @@ class GreenbookSnapshotter:
         product_name = self._column_value(row, "product_name")
         if not nrn or not product_name:
             return None
+        # The frontend strips decorative '#'/'*' from names; mirror that.
+        product_name = product_name.replace("#", "").replace("*", "").strip()
         ingredients = self._column_value(row, "active_ingredients")
         category_raw = (self._column_value(row, "category") or "").lower()
         category = _guess_category(category_raw)
@@ -292,6 +298,8 @@ def _guess_category(raw: str) -> RegistryCategory:
         return RegistryCategory.VETERINARY
     if "herbal" in raw_l:
         return RegistryCategory.HERBAL
+    if "disinfectant" in raw_l:
+        return RegistryCategory.DEVICE
     if "drug" in raw_l or "medicine" in raw_l or "pharmaceutical" in raw_l:
         return RegistryCategory.DRUG
     if "cosmetic" in raw_l:

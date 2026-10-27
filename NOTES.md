@@ -26,22 +26,29 @@ as the build proceeds. Andrew reviews this to know what was verified vs assumed.
   anti-forgery field, and a submit button guarded by Google reCAPTCHA v3 (invisible,
   `data-callback="onSubmit"`, sitekey `6LcG85gsAAAAALLXn_03izJ7kEsmKS1SCpH5ZVhw`). Automated
   submission is blocked by the captcha, so the client returns CHECK_INCOMPLETE("captcha_protected").
+- Greenbook response shape is VERIFIED against the live site (fetched 2026-10-27, `recordsTotal`
+  = 8950): it is a Laravel server-side DataTables feed at the site root returning
+  `{draw, recordsTotal, recordsFiltered, data, queries, input}` where `data` is an array of
+  object rows. Verified row keys: `NAFDAC` (the NRN, e.g. "A4-100160"), `product_name`
+  (may carry trailing `##`/`*` that the site strips), `status`, `applicant_name`,
+  `ingredient_name`, `strength`, `form_name`, `category_name`, `approval_date`, `expiry_date`,
+  `composition`, `pack_size`. The live `probe` command and `normalise()` both succeed on real
+  data (e.g. NRN "A4-100160" -> "AG Spironolactone", Active, expiry 2026-12-16).
+- Greenbook robots.txt is permissive (`Disallow:` empty), so `fetch` is allowed by policy.
 
 ## Not verified (could not reach from this environment)
 
-- The live Greenbook DataTables response shape (probe/fetch were written but not run against
-  the live site; see below). The parser is written against the reported DataTables layout and
-  adapts via a best-guess column map.
 - The NAPAMS result layout (what a successful verify returns) cannot be observed without
   solving the captcha; `_parse_record` remains a best-effort stub.
+- Greenbook `manufacturer`: the search feed exposes only `manufacturer_id`, not a name, so
+  the snapshot's `manufacturer` is None. Enriching it would require the `/manufacturers`
+  list or per-product `/products/details/{id}` pages (not done in milestone 1).
 
 ## Assumptions (NOT verified)
 
-- **Greenbook response shape**: The report that greenbook.nafdac.gov.ng loads a DataTables
-  JSON feed via a GET to the site root with `X-Requested-With: XMLHttpRequest`, paged by
-  `start` and `length` (~9,000 records), is UNVERIFIED. The `probe` command is written to
-  fetch 3 rows, print raw fields, and fail loudly if the shape differs. Do not trust the
-  column names until `probe` has been run against the live site.
+- **Greenbook DataTables endpoint**: verified working (see above). The only remaining
+  assumption is that ~8,950 records are complete enough to page fully; a full `fetch` has not
+  been run yet (it pages ~18 pages with a 2s delay).
 - **NAPAMS form behaviour**: the form is reCAPTCHA-v3 protected (verified, see above), so the
   food/water/veterinary/general lookup path is effectively CHECK_INCOMPLETE("captcha_protected")
   for automated use. A manual/human-assisted path is out of scope for milestone 1.
@@ -53,8 +60,9 @@ as the build proceeds. Andrew reviews this to know what was verified vs assumed.
 - **Category routing**: drugs/vaccines/devices/vet/herbals route to Greenbook snapshot;
   food/water/veterinary/general route to NAPAMS; cosmetics/soaps return
   CHECK_INCOMPLETE("no_registry_source").
-- **Registry categories**: The exact set of Greenbook categories and their names is unknown
-  until `probe` runs. The normaliser maps the common ones and stores everything else verbatim.
+- **Registry categories**: Verified from the live Greenbook category selector: Drugs,
+  Vaccines and Biologics, Medical devices, Veterinary, Herbals and Nutraceuticals, and
+  Disinfectants (no cosmetics/soaps). Disinfectants is mapped to DEVICE for routing/footer.
 - **Playwright availability**: NAPAMS lookups require a Playwright browser install
   (`playwright install chromium`). Tests use a fixture-backed fake and never launch a browser.
 

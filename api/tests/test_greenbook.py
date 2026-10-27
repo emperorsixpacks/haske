@@ -17,20 +17,20 @@ def _datatables_payload(rows, total=None):
 
 def _row(reg_no="A4-0123", name="Paracetamol 500mg", **extra):
     base = {
-        "Registration No": reg_no,
-        "Product Name": name,
-        "Category": "Drug",
-        "Status": "Active",
-        "Applicant": "Acme Pharma Ltd",
-        "Manufacturer": "Acme Pharma",
-        "Active Ingredients": "Paracetamol",
-        "Strength": "500mg",
-        "Form": "Tablet",
-        "Approval Date": "2020-01-01",
-        "Expiry Date": "2025-01-01",
-        "Applicant Email": "secret@example.com",
-        "Phone": "+2348000000000",
-        "Address": "1 Hidden Road",
+        "NAFDAC": reg_no,
+        "product_name": name,
+        "category_name": "Drugs",
+        "status": "Active",
+        "applicant_name": "Acme Pharma Ltd",
+        "manufacturer_name": "Acme Pharma",
+        "ingredient_name": "Paracetamol",
+        "strength": "500mg",
+        "form_name": "Tablet",
+        "approval_date": "2020-01-01",
+        "expiry_date": "2025-01-01",
+        "applicant_email": "secret@example.com",
+        "phone": "+2348000000000",
+        "address": "1 Hidden Road",
     }
     base.update(extra)
     return base
@@ -55,7 +55,7 @@ def test_probe_prints_shape(tmp_path):
     store.close()
     assert info["row_count"] == 3
     assert info["recordsTotal"] == 9000
-    assert "Registration No" in info["first_row"]
+    assert "NAFDAC" in info["first_row"]
 
 
 def test_probe_fails_loudly_on_bad_shape(tmp_path):
@@ -75,6 +75,26 @@ def test_normalise_strips_contact_fields(tmp_path):
         assert "email" not in key.lower()
         assert "phone" not in key.lower()
         assert "address" not in key.lower()
+
+
+def test_normalise_strips_decorative_chars_from_name(tmp_path):
+    snapper, store = _snapper([], tmp_path=tmp_path)
+    rec = snapper.normalise(_row(name="Paracetamol##"))
+    store.close()
+    assert rec is not None
+    assert rec.product_name == "Paracetamol"
+
+
+def test_normalise_maps_verified_fields(tmp_path):
+    snapper, store = _snapper([], tmp_path=tmp_path)
+    rec = snapper.normalise(_row())
+    store.close()
+    assert rec is not None
+    assert rec.nrn == "A4-0123"
+    assert rec.applicant == "Acme Pharma Ltd"
+    assert rec.active_ingredients == ["Paracetamol"]
+    assert rec.form == "Tablet"
+    assert rec.expiry_date == "2025-01-01"
 
 
 def test_normalise_drops_rows_without_nrn_or_name(tmp_path):
