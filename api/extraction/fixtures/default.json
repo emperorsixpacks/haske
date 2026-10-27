@@ -1,0 +1,21 @@
+{
+  "product_name": "Paracetamol Tablets 500mg",
+  "nrn": "A4-0123",
+  "batch": "PT2210",
+  "manufacture_date": "2023-06-01",
+  "expiry_date": "2026-06-01",
+  "manufacturer": "Acme Pharma Ltd",
+  "strength": "500mg",
+  "category_guess": "drug",
+  "confidence": {
+    "product_name": 0.98,
+    "nrn": 0.95,
+    "batch": 0.93,
+    "manufacture_date": 0.88,
+    "expiry_date": 0.9,
+    "manufacturer": 0.85,
+    "strength": 0.9,
+    "category_guess": 0.97
+  },
+  "legibility_notes": []
+}
