@@ -19,7 +19,7 @@ from pathlib import Path
 import httpx
 
 from ..app.config import Settings
-from .models import RegistryCategory, RegistryRecord
+from .models import LookupResult, RegistryCategory, RegistryRecord
 from .store import Store
 
 # Contact fields must never be persisted, even inside the raw record.
@@ -44,6 +44,21 @@ _FIELD_CANDIDATES: dict[str, list[str]] = {
 
 class GreenbookError(RuntimeError):
     """Raised when the Greenbook response cannot be trusted or parsed."""
+
+
+class GreenbookClient:
+    """RegistryClient-style lookup against the Greenbook snapshot store."""
+
+    name = "greenbook"
+
+    def __init__(self, store: Store):
+        self.store = store
+
+    def lookup(self, nrn: str, category=None) -> "LookupResult":
+        records = self.store.lookup(nrn)
+        if records:
+            return LookupResult.found(records)
+        return LookupResult.not_found()
 
 
 class GreenbookSnapshotter:
