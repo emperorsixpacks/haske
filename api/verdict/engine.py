@@ -153,16 +153,30 @@ def _lookup_evidence(
     retrieved_at: dt.datetime | None,
 ) -> list[Evidence]:
     evidence: list[Evidence] = []
-    for record in lookup.records:
-        evidence.append(
-            Evidence(
-                source=record.source,
-                source_url=record.source_url,
-                retrieved_at=record.retrieved_at or retrieved_at,
-                fields_compared=[_cmp_to_dict(c) for c in match.comparisons],
-                note=f"nrn={record.nrn} product={record.product_name}",
+    if lookup.records:
+        for record in lookup.records:
+            evidence.append(
+                Evidence(
+                    source=record.source or lookup.source or "registry",
+                    source_url=record.source_url or lookup.source_url,
+                    retrieved_at=record.retrieved_at or retrieved_at,
+                    fields_compared=[_cmp_to_dict(c) for c in match.comparisons],
+                    note=f"nrn={record.nrn} product={record.product_name}",
+                )
             )
+        return evidence
+
+    # No records: describe the search itself so the verdict still carries evidence.
+    note = lookup.reason if lookup.outcome == LookupOutcome.CHECK_INCOMPLETE else "searched, no matching record"
+    evidence.append(
+        Evidence(
+            source=lookup.source or "registry",
+            source_url=lookup.source_url,
+            retrieved_at=retrieved_at,
+            fields_compared=[_cmp_to_dict(c) for c in match.comparisons],
+            note=f"nrn={lookup.nrn} {note}",
         )
+    )
     return evidence
 
 

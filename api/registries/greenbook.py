@@ -50,6 +50,7 @@ class GreenbookClient:
     """RegistryClient-style lookup against the Greenbook snapshot store."""
 
     name = "greenbook"
+    source_url = "https://greenbook.nafdac.gov.ng"
 
     def __init__(self, store: Store):
         self.store = store
@@ -57,8 +58,8 @@ class GreenbookClient:
     def lookup(self, nrn: str, category=None) -> "LookupResult":
         records = self.store.lookup(nrn)
         if records:
-            return LookupResult.found(records)
-        return LookupResult.not_found()
+            return LookupResult.found(records, nrn=nrn, source="greenbook", source_url=self.source_url)
+        return LookupResult.not_found(nrn=nrn, source="greenbook", source_url=self.source_url)
 
 
 class GreenbookSnapshotter:

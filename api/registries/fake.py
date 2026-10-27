@@ -16,8 +16,8 @@ class FakeNapamsClient(RegistryClient):
 
     def lookup(self, nrn: str, category: RegistryCategory | None = None) -> LookupResult:
         if category in (RegistryCategory.COSMETIC, RegistryCategory.SOAP):
-            return LookupResult.incomplete("no_registry_source")
-        return self.results.get(nrn, LookupResult.not_found())
+            return LookupResult.incomplete("no_registry_source", nrn=nrn, source=self.name)
+        return self.results.get(nrn, LookupResult.not_found(nrn=nrn, source=self.name))
 
 
 def food_record(nrn: str, name: str, manufacturer: str | None = None) -> RegistryRecord:

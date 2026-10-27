@@ -73,19 +73,22 @@ class LookupResult(BaseModel):
     outcome: LookupOutcome
     records: list[RegistryRecord] = Field(default_factory=list)
     reason: str | None = None
+    nrn: str | None = None
+    source: str | None = None
+    source_url: str | None = None
 
     @property
     def found(self) -> bool:
         return self.outcome == LookupOutcome.FOUND
 
     @classmethod
-    def found(cls, records: list[RegistryRecord]) -> "LookupResult":
-        return cls(outcome=LookupOutcome.FOUND, records=records)
+    def found(cls, records: list[RegistryRecord], nrn: str | None = None, source: str | None = None, source_url: str | None = None) -> "LookupResult":
+        return cls(outcome=LookupOutcome.FOUND, records=records, nrn=nrn, source=source, source_url=source_url)
 
     @classmethod
-    def not_found(cls) -> "LookupResult":
-        return cls(outcome=LookupOutcome.SEARCHED_NOT_FOUND)
+    def not_found(cls, nrn: str | None = None, source: str | None = None, source_url: str | None = None) -> "LookupResult":
+        return cls(outcome=LookupOutcome.SEARCHED_NOT_FOUND, nrn=nrn, source=source, source_url=source_url)
 
     @classmethod
-    def incomplete(cls, reason: str) -> "LookupResult":
-        return cls(outcome=LookupOutcome.CHECK_INCOMPLETE, reason=reason)
+    def incomplete(cls, reason: str, nrn: str | None = None, source: str | None = None, source_url: str | None = None) -> "LookupResult":
+        return cls(outcome=LookupOutcome.CHECK_INCOMPLETE, reason=reason, nrn=nrn, source=source, source_url=source_url)

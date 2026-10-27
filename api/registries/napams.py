@@ -42,16 +42,16 @@ class NapamsClient(RegistryClient):
 
     def lookup(self, nrn: str, category: RegistryCategory | None = None) -> LookupResult:
         if category in (RegistryCategory.COSMETIC, RegistryCategory.SOAP):
-            return LookupResult.incomplete("no_registry_source")
+            return LookupResult.incomplete("no_registry_source", nrn=nrn, source=self.name, source_url=self.settings.napams_base_url)
 
         norm = normalise_nrn(nrn)
         if not norm.valid:
-            return LookupResult.incomplete(f"invalid_nrn: {norm.error or 'unrecognised'}")
+            return LookupResult.incomplete(f"invalid_nrn: {norm.error or 'unrecognised'}", nrn=nrn, source=self.name, source_url=self.settings.napams_base_url)
 
         try:
             from playwright.sync_api import sync_playwright
         except ImportError:
-            return LookupResult.incomplete("playwright_not_installed")
+            return LookupResult.incomplete("playwright_not_installed", nrn=norm.canonical, source=self.name, source_url=self.settings.napams_base_url)
 
         try:
             with sync_playwright() as p:
@@ -62,22 +62,23 @@ class NapamsClient(RegistryClient):
                     page.goto(self.settings.napams_base_url.rstrip("/") + _VERIFY_URL)
 
                     if not self._fill_and_submit(page, norm.canonical):
-                        return LookupResult.incomplete("napams_form_layout_changed")
+                        return LookupResult.incomplete("napams_form_layout_changed", nrn=norm.canonical, source=self.name, source_url=self.settings.napams_base_url)
 
                     page.wait_for_load_state("networkidle")
                     content = page.content().lower()
 
                     if any(marker in content for marker in _NOT_FOUND_MARKERS):
-                        return LookupResult.not_found()
+                        return LookupResult.not_found(nrn=norm.canonical, source=self.name, source_url=self.settings.napams_base_url)
 
                     record = self._parse_record(page)
                     if record is None:
-                        return LookupResult.incomplete("napams_result_unparseable")
-                    return LookupResult.found([record])
+                        return LookupResult.incomplete("napams_result_unparseable", nrn=norm.canonical, source=self.name, source_url=self.settings.napams_base_url)
+                    record.nrn = norm.canonical
+                    return LookupResult.found([record], nrn=norm.canonical, source=self.name, source_url=self.settings.napams_base_url)
                 finally:
                     browser.close()
         except Exception as exc:  # noqa: BLE001 - any failure is CHECK_INCOMPLETE
-            return LookupResult.incomplete(f"napams_lookup_error: {type(exc).__name__}")
+            return LookupResult.incomplete(f"napams_lookup_error: {type(exc).__name__}", nrn=norm.canonical, source=self.name, source_url=self.settings.napams_base_url)
 
     def _fill_and_submit(self, page, nrn: str) -> bool:
         for selector in _NRN_INPUT_SELECTORS:

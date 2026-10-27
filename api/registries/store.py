@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import sqlite3
+import threading
 from pathlib import Path
 
 from .models import RegistryRecord
@@ -50,13 +51,16 @@ class Store:
     def __init__(self, db_path: Path):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(self.db_path))
+        self._lock = threading.RLock()
+        self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
-        self._conn.executescript(_SCHEMA)
-        self._conn.commit()
+        with self._lock:
+            self._conn.executescript(_SCHEMA)
+            self._conn.commit()
 
     def close(self) -> None:
-        self._conn.close()
+        with self._lock:
+            self._conn.close()
 
     def add_snapshot(
         self,
@@ -67,13 +71,14 @@ class Store:
         file_path: str,
         forced: bool = False,
     ) -> int:
-        cur = self._conn.execute(
-            "INSERT INTO snapshots (source, fetched_at, record_count, content_hash, file_path, forced) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (source, fetched_at.isoformat(), record_count, content_hash, file_path, 1 if forced else 0),
-        )
-        self._conn.commit()
-        return int(cur.lastrowid)
+        with self._lock:
+            cur = self._conn.execute(
+                "INSERT INTO snapshots (source, fetched_at, record_count, content_hash, file_path, forced) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (source, fetched_at.isoformat(), record_count, content_hash, file_path, 1 if forced else 0),
+            )
+            self._conn.commit()
+            return int(cur.lastrowid)
 
     def add_records(self, snapshot_id: int, records: list[RegistryRecord]) -> int:
         rows = [
@@ -94,34 +99,40 @@ class Store:
             )
             for r in records
         ]
-        self._conn.executemany(
-            "INSERT INTO greenbook_records "
-            "(snapshot_id, nrn, product_name, category, status, applicant, manufacturer, "
-            "active_ingredients, strength, form, approval_date, expiry_date, raw) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            rows,
-        )
-        self._conn.commit()
-        return len(rows)
+        with self._lock:
+            self._conn.executemany(
+                "INSERT INTO greenbook_records "
+                "(snapshot_id, nrn, product_name, category, status, applicant, manufacturer, "
+                "active_ingredients, strength, form, approval_date, expiry_date, raw) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+            self._conn.commit()
+            return len(rows)
 
     def lookup(self, nrn: str) -> list[RegistryRecord]:
-        cur = self._conn.execute(
-            "SELECT * FROM greenbook_records WHERE nrn = ?", (nrn,)
-        )
-        return [_row_to_record(row) for row in cur.fetchall()]
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT * FROM greenbook_records WHERE nrn = ?", (nrn,)
+            )
+            rows = cur.fetchall()
+        return [_row_to_record(row) for row in rows]
 
     def latest_snapshot(self) -> dict | None:
-        cur = self._conn.execute(
-            "SELECT * FROM snapshots ORDER BY fetched_at DESC LIMIT 1"
-        )
-        row = cur.fetchone()
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT * FROM snapshots ORDER BY fetched_at DESC LIMIT 1"
+            )
+            row = cur.fetchone()
         if row is None:
             return None
         return dict(row)
 
     def record_count(self) -> int:
-        cur = self._conn.execute("SELECT COUNT(*) AS c FROM greenbook_records")
-        return int(cur.fetchone()["c"])
+        with self._lock:
+            cur = self._conn.execute("SELECT COUNT(*) AS c FROM greenbook_records")
+            row = cur.fetchone()
+            return int(row["c"])
 
 
 def _row_to_record(row: sqlite3.Row) -> RegistryRecord:
