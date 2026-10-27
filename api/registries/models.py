@@ -31,16 +31,16 @@ GREENBOOK_CATEGORIES = {
     RegistryCategory.HERBAL,
 }
 
-# Categories served by the NAPAMS live portal lookup.
+# Categories served by the NAPAMS live portal lookup (food, water, veterinary, general,
+# cosmetics, soaps; NAPAMS also returns drugs but Greenbook is the canonical drug source).
 NAPAMS_CATEGORIES = {
     RegistryCategory.FOOD,
     RegistryCategory.WATER,
     RegistryCategory.VETERINARY,
     RegistryCategory.GENERAL,
+    RegistryCategory.COSMETIC,
+    RegistryCategory.SOAP,
 }
-
-# Categories with no confirmed lookup path yet.
-NO_SOURCE_CATEGORIES = {RegistryCategory.COSMETIC, RegistryCategory.SOAP}
 
 
 class RegistryRecord(BaseModel):

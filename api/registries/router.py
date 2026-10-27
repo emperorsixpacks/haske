@@ -20,13 +20,13 @@ class RegistryRouter:
         self.no_source = no_source or NoSourceClient()
 
     def client_for(self, category: RegistryCategory) -> RegistryClient:
-        if category in (RegistryCategory.COSMETIC, RegistryCategory.SOAP):
-            return self.no_source
         if category in (
             RegistryCategory.FOOD,
             RegistryCategory.WATER,
             RegistryCategory.VETERINARY,
             RegistryCategory.GENERAL,
+            RegistryCategory.COSMETIC,
+            RegistryCategory.SOAP,
         ):
             return self.napams
         return self.greenbook

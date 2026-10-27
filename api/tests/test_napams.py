@@ -1,7 +1,7 @@
 from api.app.config import Settings
 from api.registries.fake import FakeNapamsClient, food_record
 from api.registries.models import LookupOutcome, LookupResult, RegistryCategory
-from api.registries.napams import NapamsClient
+from api.registries.napams import NapamsClient, parse_verify_text
 from api.registries.router import RegistryRouter
 
 
@@ -18,11 +18,11 @@ def test_fake_napams_not_found_is_explicit():
     assert result.outcome == LookupOutcome.SEARCHED_NOT_FOUND
 
 
-def test_napams_cosmetic_returns_check_incomplete():
-    fake = FakeNapamsClient({"A4-0123": LookupResult.found([food_record("A4-0123", "X")])})
-    result = fake.lookup("A4-0123", RegistryCategory.COSMETIC)
-    assert result.outcome == LookupOutcome.CHECK_INCOMPLETE
-    assert result.reason == "no_registry_source"
+def test_fake_napams_cosmetics_route_to_napams():
+    fake = FakeNapamsClient({"02-4139": LookupResult.found([food_record("02-4139", "Nivea Roll-on")])})
+    result = fake.lookup("02-4139", RegistryCategory.COSMETIC)
+    assert result.outcome == LookupOutcome.FOUND
+    assert result.records[0].product_name == "Nivea Roll-on"
 
 
 def test_napams_invalid_nrn_is_incomplete_not_not_found():
@@ -37,38 +37,60 @@ def test_router_routes_categories():
     router = RegistryRouter(greenbook=fake, napams=fake)
     assert router.client_for(RegistryCategory.DRUG) is fake
     assert router.client_for(RegistryCategory.FOOD) is fake
-    assert router.client_for(RegistryCategory.COSMETIC).name == "no_source"
-    assert router.lookup("A4-0123", RegistryCategory.SOAP).reason == "no_registry_source"
+    assert router.client_for(RegistryCategory.COSMETIC) is fake
+    assert router.client_for(RegistryCategory.SOAP) is fake
 
 
-class _FakeLocator:
-    def __init__(self, count):
-        self._count = count
-
-    def count(self):
-        return self._count
-
-
-class _FakePage:
-    def __init__(self, has_captcha_button, has_sitekey, content_has_grecaptcha):
-        self._has_captcha_button = has_captcha_button
-        self._has_sitekey = has_sitekey
-        self._content_has_grecaptcha = content_has_grecaptcha
-        self._locators = {
-            "button.g-recaptcha": _FakeLocator(1 if has_captcha_button else 0),
-            "[data-sitekey]": _FakeLocator(1 if has_sitekey else 0),
-        }
-
-    def locator(self, selector):
-        return self._locators.get(selector, _FakeLocator(0))
-
-    def content(self):
-        return "grecaptcha.execute" if self._content_has_grecaptcha else "no captcha"
+# Real NAPAMS verify response (text), supplied by the user.
+NIVEA_RESPONSE = """Success, Product found, Nivea Dry Comfort Anti-perspirant Roll on (02-4139) (02-4139) (02-4139) (02-4139) (02-4139) (02-4139) (02-4139) (02-4139) (02-4139) (02-4139) (02-4139) (02-4139) (02-4139) (02-4139) (02-4139)
+Product Name: Nivea Dry Comfort Anti-perspirant Roll on (02-4139) (02-4139) (02-4139) (02-4139) (02-4139) (02-4139) (02-4139) (02-4139) (02-4139) (02-4139) (02-4139) (02-4139) (02-4139) (02-4139) (02-4139) (02-4139)
+Product Category: Cosmetics
+Product Source: Nigerian Products
+Manufacturer: BEIERSDORF NIVEA CONSUMER PRODUCT NIGERIA LIMITED
+Date Approved: 2024-02-28
+Expiry Date: 2029-02-27
+NAFDAC No: 02-4139
+Active Ingredient: AQUA, ALUMINUM CHLOROHYDRATE, PPG-15 STEARYL ETHER, STEARETH-2
+"""
 
 
-def test_napams_detects_recaptcha():
+def test_parse_verify_text_extracts_fields():
+    record = parse_verify_text(NIVEA_RESPONSE)
+    assert record is not None
+    assert record.nrn == "02-4139"
+    assert record.product_name == "Nivea Dry Comfort Anti-perspirant Roll on"
+    assert record.category == RegistryCategory.COSMETIC
+    assert record.manufacturer == "BEIERSDORF NIVEA CONSUMER PRODUCT NIGERIA LIMITED"
+    assert record.approval_date == "2024-02-28"
+    assert record.expiry_date == "2029-02-27"
+    assert record.active_ingredients == [
+        "AQUA",
+        "ALUMINUM CHLOROHYDRATE",
+        "PPG-15 STEARYL ETHER",
+        "STEARETH-2",
+    ]
+    assert record.raw["product_source"] == "Nigerian Products"
+
+
+def test_parse_verify_text_rejects_non_success():
+    assert parse_verify_text("Product not found") is None
+    assert parse_verify_text("") is None
+
+
+def test_recaptcha_challenge_detection():
     client = NapamsClient(Settings())
-    assert client._has_captcha(_FakePage(True, False, False))
-    assert client._has_captcha(_FakePage(False, True, False))
-    assert client._has_captcha(_FakePage(False, False, True))
-    assert not client._has_captcha(_FakePage(False, False, False))
+
+    class Loc:
+        def __init__(self, count):
+            self._count = count
+
+        def count(self):
+            return self._count
+
+    class Page:
+        def locator(self, selector):
+            if selector in ('iframe[src*="recaptcha/api2/bframe"]', "#rc-imageselect"):
+                return Loc(1)
+            return Loc(0)
+
+    assert client._recaptcha_challenge_visible(Page())
