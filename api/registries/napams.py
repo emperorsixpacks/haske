@@ -83,7 +83,7 @@ class NapamsClient(RegistryClient):
                 try:
                     page = browser.new_page()
                     page.set_default_timeout(self.timeout_ms)
-                    page.goto(self.settings.napams_base_url.rstrip("/") + _VERIFY_URL)
+                    page.goto(self.settings.napams_base_url.rstrip("/") + _VERIFY_URL, wait_until="domcontentloaded")
 
                     if not self._fill_and_submit(page, norm.canonical):
                         return LookupResult.incomplete(
@@ -91,36 +91,42 @@ class NapamsClient(RegistryClient):
                             source=self.name, source_url=self.settings.napams_base_url,
                         )
 
-                    # The invisible reCAPTCHA either auto-passes and submits, or raises a
-                    # challenge. Wait for the POST to settle, then inspect.
+                    # On a real browser the invisible reCAPTCHA auto-passes and the form
+                    # submits (navigating to /Home/VerifyProduct). From a headless/datacenter
+                    # IP reCAPTCHA silently does nothing. Wait, bounded, then classify.
                     try:
-                        page.wait_for_load_state("networkidle")
+                        page.wait_for_url("**/Home/VerifyProduct", timeout=8_000)
+                        navigated = True
                     except Exception:  # noqa: BLE001
-                        pass
+                        navigated = False
+
+                    if navigated:
+                        text = page.inner_text("body")
+                        record = parse_verify_text(text)
+                        if record is not None:
+                            record.nrn = norm.canonical
+                            return LookupResult.found(
+                                [record], nrn=norm.canonical,
+                                source=self.name, source_url=self.settings.napams_base_url,
+                            )
+                        lowered = text.lower()
+                        if any(marker in lowered for marker in _NOT_FOUND_MARKERS):
+                            return LookupResult.not_found(
+                                nrn=norm.canonical, source=self.name,
+                                source_url=self.settings.napams_base_url,
+                            )
+                        return LookupResult.incomplete(
+                            "napams_result_unparseable", nrn=norm.canonical,
+                            source=self.name, source_url=self.settings.napams_base_url,
+                        )
 
                     if self._recaptcha_challenge_visible(page):
                         return LookupResult.incomplete(
                             "captcha_challenge", nrn=norm.canonical,
                             source=self.name, source_url=self.settings.napams_base_url,
                         )
-
-                    text = page.inner_text("body")
-                    record = parse_verify_text(text)
-                    if record is not None:
-                        record.nrn = norm.canonical
-                        return LookupResult.found(
-                            [record], nrn=norm.canonical,
-                            source=self.name, source_url=self.settings.napams_base_url,
-                        )
-
-                    lowered = text.lower()
-                    if any(marker in lowered for marker in _NOT_FOUND_MARKERS):
-                        return LookupResult.not_found(
-                            nrn=norm.canonical, source=self.name,
-                            source_url=self.settings.napams_base_url,
-                        )
                     return LookupResult.incomplete(
-                        "napams_result_unparseable", nrn=norm.canonical,
+                        "recaptcha_blocked", nrn=norm.canonical,
                         source=self.name, source_url=self.settings.napams_base_url,
                     )
                 finally:

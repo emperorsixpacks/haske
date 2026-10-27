@@ -44,9 +44,12 @@ as the build proceeds. Andrew reviews this to know what was verified vs assumed.
 
 ## Not verified (could not reach from this environment)
 
-- NAPAMS automated submission end-to-end: the invisible reCAPTCHA may auto-pass (form submits)
-  or raise a challenge from a headless browser. The client attempts the submission and treats
-  a challenge as CHECK_INCOMPLETE("captcha_challenge"), but this has not been run live.
+- NAPAMS automated submission end-to-end was TESTED live (headless Chromium, 2026-10-27):
+  the form fills and the Verify button is clicked, but Google reCAPTCHA silently blocks the
+  headless/datacenter IP (no token issued, no navigation, no challenge). The client reports
+  CHECK_INCOMPLETE("recaptcha_blocked"). On a real residential browser reCAPTCHA auto-passes
+  (that is how Andrew captured the Nivea response), so this path would work if the lookup ran
+  from a residential IP or a real browser context - not yet arranged for milestone 1.
 - Greenbook `manufacturer`: the search feed exposes only `manufacturer_id`, not a name, so
   the snapshot's `manufacturer` is None. Enriching it would require the `/manufacturers`
   list or per-product `/products/details/{id}` pages (not done in milestone 1).
