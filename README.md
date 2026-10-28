@@ -54,5 +54,9 @@ configure the model. Leave `META_API_KEY` empty for MOCK mode.
   loudly if the response shape differs from what is expected.
 - `uv run python -m api.cli fetch` pages the full Greenbook table into a dated snapshot with a
   content hash, honouring robots.txt and a 2 second inter-request delay.
+- `uv run python -m api.cli verify <NRN> [--category <name>]` looks the number up on the NAPAMS
+  portal via Playwright and prints the result. Requires `uv run playwright install chromium`.
+  NAPAMS is reCAPTCHA-guarded, so from a datacenter/headless IP this returns
+  `recaptcha_blocked`; from a residential IP it auto-passes and returns the record.
 
 See `NOTES.md` for assumptions and unverified items.

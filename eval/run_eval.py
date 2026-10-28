@@ -20,7 +20,7 @@ from pathlib import Path
 from api.app.config import Settings
 from api.app.service import CheckService
 from api.registries.demo import seed_demo
-from api.registries.fake import FakeNapamsClient
+from api.registries.fake import BlockedNapamsClient
 from api.registries.greenbook import GreenbookClient
 from api.registries.nrn import normalise_nrn
 from api.registries.router import RegistryRouter
@@ -45,7 +45,7 @@ def _build_service() -> tuple[CheckService, Store]:
         settings = Settings(data_dir=Path(td))
         store = Store(settings.db_path)
         seed_demo(store)
-        router = RegistryRouter(greenbook=GreenbookClient(store), napams=FakeNapamsClient({}))
+        router = RegistryRouter(greenbook=GreenbookClient(store), napams=BlockedNapamsClient())
         # MockExtractor is unused here: the harness evaluates check_fields against fixtures.
         from api.extraction.mock import MockExtractor
 

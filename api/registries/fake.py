@@ -18,6 +18,15 @@ class FakeNapamsClient(RegistryClient):
         return self.results.get(nrn, LookupResult.not_found(nrn=nrn, source=self.name))
 
 
+class BlockedNapamsClient(RegistryClient):
+    """Mimics the live NAPAMS portal being reCAPTCHA-blocked for automated lookups."""
+
+    name = "napams_blocked"
+
+    def lookup(self, nrn: str, category: RegistryCategory | None = None) -> LookupResult:
+        return LookupResult.incomplete("recaptcha_blocked", nrn=nrn, source=self.name)
+
+
 def food_record(nrn: str, name: str, manufacturer: str | None = None) -> RegistryRecord:
     return RegistryRecord(
         nrn=nrn,
