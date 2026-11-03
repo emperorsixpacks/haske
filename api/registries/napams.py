@@ -222,3 +222,94 @@ def _split_ingredients(value: str | None) -> list[str]:
     if not value:
         return []
     return [p.strip() for p in re.split(r"[,;|]", value) if p.strip()]
+
+
+# ---------------------------------------------------------------------------
+# reCAPTCHA workaround: pre-verified result cache
+# ---------------------------------------------------------------------------
+
+import json as _json
+from pathlib import Path as _Path
+
+
+def load_napams_cache(path: _Path) -> dict[str, LookupResult]:
+    """Load a pre-verified NAPAMS result cache from a JSON file.
+
+    The file is a dict keyed by canonical NRN. Each value is a raw dict of
+    RegistryRecord fields (the same shape parse_verify_text() produces).
+    This lets you populate known results from a residential browser session,
+    bypassing reCAPTCHA for those NRNs in production.
+
+    Example file format::
+
+        {
+          "02-4139": {
+            "product_name": "Nivea Dry Comfort Anti-perspirant Roll on",
+            "category": "cosmetic",
+            "manufacturer": "BEIERSDORF NIVEA CONSUMER PRODUCT NIGERIA LIMITED",
+            "approval_date": "2024-02-28",
+            "expiry_date": "2029-02-27",
+            "active_ingredients": ["AQUA", "ALUMINUM CHLOROHYDRATE"]
+          }
+        }
+
+    Returns an empty dict if the file is missing, unreadable, or malformed.
+    """
+    import logging
+
+    if not path or not _Path(path).exists():
+        return {}
+    try:
+        raw = _json.loads(_Path(path).read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            return {}
+        results: dict[str, LookupResult] = {}
+        for nrn, fields in raw.items():
+            if not isinstance(fields, dict):
+                continue
+            try:
+                record = RegistryRecord(
+                    nrn=nrn,
+                    product_name=fields.get("product_name") or nrn,
+                    category=_map_category(fields.get("category")),
+                    manufacturer=fields.get("manufacturer"),
+                    active_ingredients=fields.get("active_ingredients") or [],
+                    approval_date=fields.get("approval_date"),
+                    expiry_date=fields.get("expiry_date"),
+                    source="napams_cache",
+                    source_url="https://registration.nafdac.gov.ng",
+                    retrieved_at=dt.datetime.now(dt.timezone.utc),
+                )
+                results[nrn] = LookupResult.found(
+                    [record], nrn=nrn, source="napams_cache",
+                    source_url="https://registration.nafdac.gov.ng",
+                )
+            except Exception:  # noqa: BLE001
+                continue
+        logging.getLogger("haske").info("napams cache: loaded %d entries from %s", len(results), path)
+        return results
+    except Exception:  # noqa: BLE001
+        logging.getLogger("haske").warning("napams cache: could not load %s", path)
+        return {}
+
+
+class NapamsCacheClient(RegistryClient):
+    """NAPAMS client with a pre-verified result cache to bypass reCAPTCHA.
+
+    On lookup, checks the cache first. Cache miss falls through to the live
+    NapamsClient (which may return recaptcha_blocked from a datacenter IP).
+    Populate the cache file from a residential browser session using:
+        uv run python -m api.cli verify <NRN> --category <cat>
+    then copy the result into napams_cache.json.
+    """
+
+    name = "napams"
+
+    def __init__(self, live_client: NapamsClient, cache: dict[str, LookupResult]):
+        self._live = live_client
+        self._cache = cache
+
+    def lookup(self, nrn: str, category: RegistryCategory | None = None) -> LookupResult:
+        if nrn in self._cache:
+            return self._cache[nrn]
+        return self._live.lookup(nrn, category)

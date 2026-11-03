@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     # Local storage.
     data_dir: Path = _default_data_dir()
 
+    # Optional pre-verified NAPAMS results cache (JSON file, keyed by NRN).
+    # Populate this from a residential browser session to bypass reCAPTCHA in production.
+    # Format: {"02-4139": {"product_name": "...", "manufacturer": "...", ...}, ...}
+    napams_cache_path: Path | None = None
+
     # Politeness knobs.
     request_delay_seconds: float = 2.0
     request_timeout_seconds: float = 30.0

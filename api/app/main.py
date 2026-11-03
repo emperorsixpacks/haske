@@ -12,7 +12,7 @@ from ..extraction.mock import get_extractor
 from ..registries.demo import seed_demo
 from ..registries.fake import FakeNapamsClient
 from ..registries.greenbook import GreenbookClient
-from ..registries.napams import NapamsClient
+from ..registries.napams import NapamsClient, NapamsCacheClient, load_napams_cache
 from ..registries.router import RegistryRouter
 from ..registries.store import Store
 from .config import get_settings
@@ -32,7 +32,12 @@ def _build_service():
         seed_demo(store)
         napams = FakeNapamsClient({})
     else:
-        napams = NapamsClient(settings)
+        live_napams = NapamsClient(settings)
+        if settings.napams_cache_path:
+            cache = load_napams_cache(settings.napams_cache_path)
+            napams = NapamsCacheClient(live_napams, cache)
+        else:
+            napams = live_napams
     router = RegistryRouter(greenbook=GreenbookClient(store), napams=napams)
     extractor = get_extractor(settings)
     return settings, store, CheckService(settings, store, extractor, router)
