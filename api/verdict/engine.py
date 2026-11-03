@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import datetime as dt
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
 from ..registries.matcher import MatchOutcome, MatchResult
 from ..registries.models import LookupOutcome, LookupResult, RegistryCategory
+
+if TYPE_CHECKING:
+    from ..registries.alerts import AlertFinding
 
 
 class VerdictCode(str, Enum):
@@ -16,7 +20,8 @@ class VerdictCode(str, Enum):
     REGISTRY_MISMATCH = "REGISTRY_MISMATCH"
     NOT_FOUND_IN_REGISTRY = "NOT_FOUND_IN_REGISTRY"
     EXPIRED_OR_INACTIVE = "EXPIRED_OR_INACTIVE"
-    ALERT_MATCH = "ALERT_MATCH"  # reserved for milestone 2
+    ALERT_MATCH = "ALERT_MATCH"
+    KNOWN_TARGET = "KNOWN_TARGET"
     CANNOT_CONFIRM = "CANNOT_CONFIRM"
 
 
@@ -64,15 +69,23 @@ def decide(
     retrieved_at: dt.datetime | None = None,
     consistency_flags: list[str] | None = None,
     batch_conflict_note: str | None = None,
+    alert_finding: "AlertFinding | None" = None,
 ) -> Verdict:
     """Decide a verdict deterministically from lookup + match outcomes.
 
     consistency_flags: output of api/extraction/consistency.check_consistency()
     batch_conflict_note: output of api/observations/store.ConflictResult.to_note()
-    Both are evidence signals only. They never change the verdict code.
+    alert_finding: output of api/registries/alerts.AlertRegistry.lookup().
+    Signals never change the verdict code. Alert findings are the only inputs that
+    produce ALERT_MATCH or KNOWN_TARGET, and they come from code, never a model.
     """
     consistency_flags = consistency_flags or []
     signals = _build_signals_note(consistency_flags, batch_conflict_note)
+
+    # An official alert matching NRN + batch is the strongest signal and takes
+    # priority over the registry, because a falsified NRN may not be registered at all.
+    if alert_finding is not None and alert_finding.kind == "ALERT_MATCH":
+        return _alert_match_verdict(alert_finding, category, signals)
 
     if lookup.outcome == LookupOutcome.CHECK_INCOMPLETE:
         return Verdict(
@@ -134,21 +147,10 @@ def decide(
             evidence=_lookup_evidence(lookup, match, category, retrieved_at, signals),
         )
 
-    # Milestone 2: check public alerts before declaring consistent.
-    # The alert registry is empty in milestone 1, so this is always a no-op.
-    from ..registries.alerts import get_alert_registry
-    alert = get_alert_registry().lookup(lookup.nrn or "", None)
-    if alert is not None:
-        return Verdict(
-            code=VerdictCode.ALERT_MATCH,
-            title="Matches an official alert",
-            message=(
-                "This product matches a cited official NAFDAC alert. "
-                "The register shows indicators found: see the evidence for the source."
-            ),
-            footer=_footer_for(category),
-            evidence=_lookup_evidence(lookup, match, category, retrieved_at, signals),
-        )
+    # The label matches the registry. If the NRN is the target of a known alert but
+    # this batch is not one of the flagged counterfeit batches, warn rather than pass.
+    if alert_finding is not None and alert_finding.kind == "KNOWN_TARGET":
+        return _known_target_verdict(alert_finding, category, signals)
 
     return Verdict(
         code=VerdictCode.CONSISTENT_WITH_REGISTRY,
@@ -170,6 +172,59 @@ def _build_signals_note(
     if batch_conflict_note:
         parts.append(batch_conflict_note)
     return "; ".join(parts) if parts else None
+
+
+def _alert_evidence(finding: "AlertFinding", kind: str) -> Evidence:
+    alert = finding.alert
+    parts = [f"alert_no={alert.alert_no}"]
+    if alert.date:
+        parts.append(f"date={alert.date}")
+    if finding.matched:
+        parts.append(f"batch={finding.matched.batch}")
+    if alert.quoted_text:
+        parts.append(f"quote={alert.quoted_text}")
+    note = "; ".join(parts)
+    return Evidence(
+        source=f"NAFDAC Public Alert ({kind})",
+        source_url=alert.source_url,
+        fields_compared=[],
+        note=note,
+    )
+
+
+def _alert_match_verdict(finding: "AlertFinding", category: RegistryCategory, signals: str | None) -> Verdict:
+    alert = finding.alert
+    message = (
+        f"NAFDAC Public Alert No. {alert.alert_no} matches this product"
+        + (f" (batch {finding.matched.batch})" if finding.matched else "")
+        + ". "
+        + (alert.quoted_text or "See the linked alert for details.")
+    )
+    if finding.fuzzy:
+        message += " The batch match was fuzzy, so please confirm the batch code carefully."
+    return Verdict(
+        code=VerdictCode.ALERT_MATCH,
+        title="Matches an official alert",
+        message=message,
+        footer=_footer_for(category),
+        evidence=[_alert_evidence(finding, "ALERT_MATCH")],
+        abstained=False,
+    )
+
+
+def _known_target_verdict(finding: "AlertFinding", category: RegistryCategory, signals: str | None) -> Verdict:
+    alert = finding.alert
+    return Verdict(
+        code=VerdictCode.KNOWN_TARGET,
+        title="Known target of a NAFDAC alert",
+        message=(
+            "This product has been counterfeited before. "
+            "Your batch is not in the alert. Take the extra steps below."
+        ),
+        footer=_footer_for(category),
+        evidence=[_alert_evidence(finding, "KNOWN_TARGET")],
+        abstained=False,
+    )
 
 
 def _footer_for(category: RegistryCategory) -> str | None:

@@ -1,72 +1,172 @@
-"""Public-alert registry stub (Milestone 2).
+"""NAFDAC public-alert registry (Evidence-First).
 
-When NAFDAC publishes a public advisory matching a product AND batch, the verdict engine
-must return ALERT_MATCH instead of CONSISTENT_WITH_REGISTRY. This module will hold the
-parsed alert database and the lookup logic.
+Alerts are curated from nafdac.gov.ng public-alert pages into alert_seed.json. Every entry
+carries its source_url and date; never invent an entry. If a field is not stated in the
+source, leave it empty.
 
-Milestone 1 status: STUB. No alert data is loaded. lookup() always returns None.
-Milestone 2 tasks:
-- Parse NAFDAC public-alert PDFs/HTML into AlertRecord entries.
-- Populate a store (SQLite table or JSON file) with alert records.
-- Implement lookup() to match NRN + batch against stored alerts.
-- Wire the result into verdict/engine.py decide() (see the ALERT_MATCH check there).
+Matching is deterministic code only. Normalization uppercases and strips spaces and
+hyphens, and O/0 plus I/1 are treated as confusable. A batch matches a counterfeit example
+exactly or within Levenshtein edit distance 1 (flagged as a fuzzy, OCR-confidence match).
+
+Outcomes:
+- ALERT_MATCH: the NRN matches an alert AND the batch matches a counterfeit example.
+- KNOWN_TARGET: the NRN matches an alert but the batch is not one of the listed counterfeit
+  batches. The product has been counterfeited before; we never claim this batch is genuine.
+- None: the NRN is not in any alert, or the batch matches a genuine example (the alert does
+  not apply to the genuine reference).
 """
 
 from __future__ import annotations
 
-import datetime as dt
-from dataclasses import dataclass, field
+import json
+from dataclasses import dataclass
+from pathlib import Path
+
+_SEED_PATH = Path(__file__).resolve().parent / "alert_seed.json"
+
+
+@dataclass(frozen=True)
+class BatchExample:
+    batch: str
+    mfg: str | None = None
+    exp: str | None = None
+    label: str | None = None
 
 
 @dataclass(frozen=True)
 class AlertRecord:
-    """A single NAFDAC public advisory entry."""
+    id: str
+    alert_no: str
+    date: str | None
+    product: str
+    nrn: str | None
+    genuine_examples: tuple[BatchExample, ...] = ()
+    counterfeit_examples: tuple[BatchExample, ...] = ()
+    known_differences: tuple[str, ...] = ()
+    quoted_text: str | None = None
+    source_url: str | None = None
 
-    nrn: str
-    product_name: str
-    batch: str | None = None  # None means the alert applies to all batches
-    alert_url: str | None = None
-    issued_date: dt.date | None = None
-    summary: str | None = None
+
+@dataclass(frozen=True)
+class AlertFinding:
+    kind: str  # "ALERT_MATCH" | "KNOWN_TARGET"
+    alert: AlertRecord
+    matched: BatchExample | None = None
+    fuzzy: bool = False
+
+
+def normalize(value: str | None) -> str:
+    """Uppercase and strip everything non-alphanumeric (spaces, hyphens, underscores)."""
+    if not value:
+        return ""
+    return "".join(ch for ch in value.upper() if ch.isalnum())
+
+
+def confusable(value: str) -> str:
+    """Map O->0 and I->1 so visually ambiguous characters compare equal."""
+    return value.replace("O", "0").replace("I", "1")
+
+
+def edit_distance(a: str, b: str) -> int:
+    """Levenshtein distance between two strings."""
+    if a == b:
+        return 0
+    if not a:
+        return len(b)
+    if not b:
+        return len(a)
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cost = 0 if ca == cb else 1
+            cur.append(min(cur[-1] + 1, prev[j] + 1, prev[j - 1] + cost))
+        prev = cur
+    return prev[-1]
 
 
 class AlertRegistry:
-    """In-memory alert registry. Milestone 2 will load from a persistent store."""
-
     def __init__(self, records: list[AlertRecord] | None = None):
         self._records: list[AlertRecord] = records or []
 
     def add(self, record: AlertRecord) -> None:
         self._records.append(record)
 
-    def lookup(self, nrn: str, batch: str | None = None) -> AlertRecord | None:
-        """Return the first alert that matches the NRN and (if present) the batch.
-
-        Matching rules:
-        - NRN must match exactly (case-insensitive).
-        - If the alert has no batch, it matches all batches.
-        - If the alert has a batch, it must match the supplied batch (case-insensitive).
-        Returns None if no alert matches (milestone 1: always None).
-        """
-        nrn_norm = nrn.strip().upper()
-        batch_norm = (batch or "").strip().upper()
-        for alert in self._records:
-            if alert.nrn.strip().upper() != nrn_norm:
-                continue
-            if alert.batch is None:
-                return alert
-            if batch_norm and alert.batch.strip().upper() == batch_norm:
-                return alert
-        return None
-
     def __len__(self) -> int:
         return len(self._records)
 
+    def lookup(self, nrn: str | None, batch: str | None = None) -> AlertFinding | None:
+        if not nrn:
+            return None
+        nrn_norm = normalize(nrn)
+        nrn_conf = confusable(nrn_norm)
+        batch_norm = normalize(batch)
+        batch_conf = confusable(batch_norm)
 
-# Module-level singleton. Milestone 2 will populate this from a data source.
-_registry = AlertRegistry()
+        for alert in self._records:
+            if not alert.nrn:
+                continue
+            alert_norm = normalize(alert.nrn)
+            if alert_norm != nrn_norm and confusable(alert_norm) != nrn_conf:
+                continue
+
+            # NRN matches this alert.
+            if not batch_norm:
+                return AlertFinding(kind="KNOWN_TARGET", alert=alert)
+
+            for ex in alert.counterfeit_examples:
+                ex_norm = normalize(ex.batch)
+                if ex_norm == batch_norm:
+                    return AlertFinding(kind="ALERT_MATCH", alert=alert, matched=ex, fuzzy=False)
+                if confusable(ex_norm) == batch_conf:
+                    return AlertFinding(kind="ALERT_MATCH", alert=alert, matched=ex, fuzzy=True)
+                if edit_distance(confusable(ex_norm), batch_conf) <= 1:
+                    return AlertFinding(kind="ALERT_MATCH", alert=alert, matched=ex, fuzzy=True)
+
+            for ex in alert.genuine_examples:
+                ex_norm = normalize(ex.batch)
+                if ex_norm == batch_norm or confusable(ex_norm) == batch_conf:
+                    # The batch matches the alert's genuine reference; the alert does not apply.
+                    return None
+
+            return AlertFinding(kind="KNOWN_TARGET", alert=alert)
+
+        return None
+
+
+def _load_seed() -> list[AlertRecord]:
+    records: list[AlertRecord] = []
+    if not _SEED_PATH.exists():
+        return records
+    data = json.loads(_SEED_PATH.read_text())
+    for item in data.get("alerts", []):
+        records.append(
+            AlertRecord(
+                id=item["id"],
+                alert_no=item["alert_no"],
+                date=item.get("date"),
+                product=item["product"],
+                nrn=item.get("nrn"),
+                genuine_examples=tuple(
+                    BatchExample(**ex) for ex in item.get("genuine_examples", [])
+                ),
+                counterfeit_examples=tuple(
+                    BatchExample(**ex) for ex in item.get("counterfeit_examples", [])
+                ),
+                known_differences=tuple(item.get("known_differences", [])),
+                quoted_text=item.get("quoted_text"),
+                source_url=item.get("source_url"),
+            )
+        )
+    return records
+
+
+_registry: AlertRegistry | None = None
 
 
 def get_alert_registry() -> AlertRegistry:
-    """Return the shared alert registry (always empty in milestone 1)."""
+    """Return the shared alert registry, lazily loaded from the curated seed."""
+    global _registry
+    if _registry is None:
+        _registry = AlertRegistry(_load_seed())
     return _registry

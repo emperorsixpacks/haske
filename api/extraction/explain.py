@@ -147,7 +147,11 @@ class TemplateExplainer(Explainer):
             "The register shows this registration is expired or inactive."
         ),
         "ALERT_MATCH": (
-            "This product matches a cited official alert. See the evidence for details."
+            "This product matches a cited official NAFDAC alert. See the linked alert for details."
+        ),
+        "KNOWN_TARGET": (
+            "This product has been counterfeited before. Your batch is not in the alert. "
+            "Take the extra steps below."
         ),
         "CANNOT_CONFIRM": (
             "There is not enough evidence to confirm whether this product matches the registry."

@@ -1,15 +1,10 @@
-"""Tests for NAPAMS cache workaround (task 4) and alert registry stub (task 6)."""
+"""Tests for the NAPAMS cache workaround."""
 
 import json
-import datetime as dt
 
-import pytest
-
-from api.registries.alerts import AlertRecord, AlertRegistry
 from api.registries.fake import BlockedNapamsClient, FakeNapamsClient, food_record
 from api.registries.models import LookupOutcome, LookupResult, RegistryCategory
-from api.registries.napams import NapamsCacheClient, NapamsClient, load_napams_cache
-from api.app.config import Settings
+from api.registries.napams import NapamsCacheClient, load_napams_cache
 
 
 # ---------------------------------------------------------------------------
@@ -75,71 +70,4 @@ def test_load_napams_cache_skips_malformed_entries(tmp_path):
     assert "bad-entry" not in result
 
 
-# ---------------------------------------------------------------------------
-# AlertRegistry stub (task 6)
-# ---------------------------------------------------------------------------
-
-def test_alert_registry_empty_by_default():
-    reg = AlertRegistry()
-    assert reg.lookup("A4-0123") is None
-    assert len(reg) == 0
-
-
-def test_alert_registry_lookup_by_nrn():
-    reg = AlertRegistry()
-    alert = AlertRecord(nrn="A4-0123", product_name="Fake Paracetamol")
-    reg.add(alert)
-    assert reg.lookup("A4-0123") is alert
-    assert reg.lookup("A4-9999") is None
-
-
-def test_alert_registry_batch_specific_match():
-    reg = AlertRegistry()
-    alert = AlertRecord(nrn="A4-0123", product_name="Fake Drug", batch="BN001")
-    reg.add(alert)
-    assert reg.lookup("A4-0123", "BN001") is alert
-    assert reg.lookup("A4-0123", "BN002") is None
-
-
-def test_alert_registry_no_batch_matches_all():
-    reg = AlertRegistry()
-    alert = AlertRecord(nrn="A4-0123", product_name="Recalled Drug", batch=None)
-    reg.add(alert)
-    assert reg.lookup("A4-0123", "BN001") is alert
-    assert reg.lookup("A4-0123", None) is alert
-
-
-def test_alert_registry_case_insensitive():
-    reg = AlertRegistry()
-    alert = AlertRecord(nrn="a4-0123", product_name="Product")
-    reg.add(alert)
-    assert reg.lookup("A4-0123") is alert
-
-
-def test_alert_match_verdict_when_registry_has_entry():
-    """When the alert registry has a match, decide() returns ALERT_MATCH."""
-    from api.registries.alerts import AlertRegistry, AlertRecord
-    from api.registries.matcher import MatchOutcome, MatchResult
-    from api.registries.models import LookupResult, RegistryRecord
-    from api.verdict.engine import VerdictCode, decide
-    import api.registries.alerts as alerts_module
-
-    # Temporarily populate the global registry.
-    original = alerts_module._registry
-    try:
-        alerts_module._registry = AlertRegistry([
-            AlertRecord(nrn="A4-0123", product_name="Fake Paracetamol")
-        ])
-        record = RegistryRecord(
-            nrn="A4-0123", product_name="Paracetamol 500mg", status="Active", source="greenbook"
-        )
-        verdict = decide(
-            LookupResult.found([record], nrn="A4-0123"),
-            MatchResult(outcome=MatchOutcome.MATCH, matched_record=record),
-            RegistryCategory.DRUG,
-        )
-        assert verdict.code == VerdictCode.ALERT_MATCH
-        assert "fake" not in verdict.message.lower()
-        assert "counterfeit" not in verdict.message.lower()
-    finally:
-        alerts_module._registry = original
+# Alert registry tests live in api/tests/test_alerts.py (Evidence-First).

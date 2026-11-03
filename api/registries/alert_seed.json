@@ -1,0 +1,41 @@
+{
+  "alerts": [
+    {
+      "id": "nafdac-027-2025-postinor2",
+      "alert_no": "027/2025",
+      "date": "2025-08-22",
+      "product": "Postinor 2 (Levonorgestrel 0.75mg)",
+      "nrn": "04-6985",
+      "genuine_examples": [
+        { "batch": "T32458H", "mfg": "02/2023", "exp": "02/2027" }
+      ],
+      "counterfeit_examples": [
+        { "label": "Type 1", "batch": "T36184B", "mfg": "08/2024", "exp": "08/2028" },
+        { "label": "Type 2", "batch": "332", "mfg": "03/2023", "exp": "02/2027" }
+      ],
+      "known_differences": [
+        "The font size of the text on the pin verification sticker appears smaller, and the word Veify is misspelt instead of Verify.",
+        "Behind the pack the fake spells Distnibuted instead of distributed."
+      ],
+      "quoted_text": "A report was received from the Society of Family Health (SFH), the MAH, which confirmed that their company did not import that product batch.",
+      "source_url": "https://nafdac.gov.ng/public-alert-no-027-2025-alert-on-confirmed-counterfeit-postinor2-levonorgestrel-0-75mg-in-nigeria/"
+    },
+    {
+      "id": "nafdac-042-2026-bppl-artemether-lumefantrine",
+      "alert_no": "042/2026",
+      "date": "2026-08-19",
+      "product": "BPPL Artemether/Lumefantrine 80mg/480mg",
+      "nrn": "02-3457",
+      "genuine_examples": [],
+      "counterfeit_examples": [
+        { "batch": "BP5203", "mfg": "10/2024", "exp": "09/2027" }
+      ],
+      "known_differences": [
+        "The NAFDAC registration number 02-3457 is fake.",
+        "The marketing authorisation holder is not declared on the product label."
+      ],
+      "quoted_text": "Alert on the seizure of suspected substandard and falsified BPPL Artemether/Lumefantrine 80mg/480mg.",
+      "source_url": "https://nafdac.gov.ng/public-alert-no-042-2026-alert-on-the-seizure-of-suspected-substandard-and-falsified-bppl-artemether-lumefantrine-80mg-480mg/"
+    }
+  ]
+}

@@ -9,6 +9,7 @@ from ..extraction.explain import Explainer, get_explainer
 from ..extraction.schemas import ExtractionResult
 from ..extraction.vision import Extractor
 from ..observations.store import ObservationStore
+from ..registries.alerts import get_alert_registry
 from ..registries.matcher import match
 from ..registries.models import LookupResult, RegistryCategory
 from ..registries.nrn import normalise_nrn
@@ -16,7 +17,7 @@ from ..registries.router import RegistryRouter
 from ..registries.store import Store
 from ..verdict.engine import decide
 from .config import Settings
-from .schemas import CheckResponse, NrnInfo
+from .schemas import AlertReference, CheckResponse, NrnInfo
 
 _GUESS_TO_CATEGORY = {
     "drug": RegistryCategory.DRUG,
@@ -37,6 +38,25 @@ _GUESS_TO_CATEGORY = {
 
 def category_from_guess(guess: str | None) -> RegistryCategory:
     return _GUESS_TO_CATEGORY.get((guess or "").strip().lower(), RegistryCategory.UNKNOWN)
+
+
+def _build_alert_reference(alert_finding) -> AlertReference | None:
+    """Convert an AlertFinding into the API-facing AlertReference."""
+    if alert_finding is None:
+        return None
+    alert = alert_finding.alert
+    return AlertReference(
+        kind=alert_finding.kind,
+        alert_no=alert.alert_no,
+        date=alert.date,
+        product=alert.product,
+        nrn=alert.nrn,
+        source_url=alert.source_url,
+        known_differences=list(alert.known_differences),
+        quoted_text=alert.quoted_text,
+        matched_batch=alert_finding.matched.batch if alert_finding.matched else None,
+        fuzzy=alert_finding.fuzzy,
+    )
 
 
 class CheckService:
@@ -89,6 +109,9 @@ class CheckService:
 
         match_result = match(extraction.as_label_dict(), lookup.records)
 
+        # Evidence-First: match against the NAFDAC public-alert registry (deterministic).
+        alert_finding = get_alert_registry().lookup(nrn.canonical, extraction.batch)
+
         # Tier 2: deterministic label consistency checks.
         consistency = check_consistency(extraction)
 
@@ -125,7 +148,10 @@ class CheckService:
             retrieved_at,
             consistency_flags=consistency.flags,
             batch_conflict_note=batch_conflict_note,
+            alert_finding=alert_finding,
         )
+
+        alert_ref = _build_alert_reference(alert_finding)
 
         # Ask the LLM to write a plain-language explanation of the already-decided verdict.
         evidence_note = verdict.evidence[0].note if verdict.evidence else None
@@ -153,6 +179,7 @@ class CheckService:
             ),
             match_outcome=match_result.outcome.value,
             verdict=verdict,
+            alert=alert_ref,
         )
 
     def _snapshot_time(self) -> dt.datetime | None:

@@ -30,12 +30,21 @@ def test_template_explainer_returns_string_for_all_codes():
         assert len(result) > 0
 
 
-def test_template_explainer_never_says_fake_or_counterfeit():
+def test_template_explainer_never_says_fake():
     exp = TemplateExplainer()
     for code in TemplateExplainer._MESSAGES:
         text = exp.explain(code, None, None, None, None) or ""
         assert "fake" not in text.lower()
-        assert "counterfeit" not in text.lower()
+
+
+def test_counterfeit_only_in_alert_context():
+    # "counterfeit" is only allowed in the KNOWN_TARGET message, which references a real
+    # NAFDAC alert. It must not leak into any other verdict wording.
+    exp = TemplateExplainer()
+    for code in TemplateExplainer._MESSAGES:
+        text = exp.explain(code, None, None, None, None) or ""
+        if "counterfeit" in text.lower():
+            assert code == "KNOWN_TARGET", f"counterfeit appears outside alert context in {code}"
 
 
 def test_get_explainer_returns_template_in_mock_mode():

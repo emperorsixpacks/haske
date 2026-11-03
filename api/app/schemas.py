@@ -28,11 +28,25 @@ class NrnInfo(BaseModel):
     valid: bool = False
 
 
+class AlertReference(BaseModel):
+    kind: str  # "ALERT_MATCH" | "KNOWN_TARGET"
+    alert_no: str
+    date: str | None = None
+    product: str
+    nrn: str | None = None
+    source_url: str | None = None
+    known_differences: list[str] = []
+    quoted_text: str | None = None
+    matched_batch: str | None = None
+    fuzzy: bool = False
+
+
 class CheckResponse(BaseModel):
     extraction: ExtractionResult
     nrn: NrnInfo
     match_outcome: str
     verdict: Verdict
+    alert: AlertReference | None = None
 
 
 class RegistryStatus(BaseModel):

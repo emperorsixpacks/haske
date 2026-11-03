@@ -2,8 +2,8 @@
 
 Language rules enforced here:
 - Say "indicators found" and "the register shows"; never overstate.
-- Never write "fake" or "counterfeit" unless a cited official alert matches product AND
-  batch (milestone 2). ALERT_MATCH is reserved and does not carry those words yet.
+- The words "fake" or "counterfeit" may appear ONLY inside quoted, attributed NAFDAC alert
+  text (ALERT_MATCH and KNOWN_TARGET verdicts reference a real, cited official alert).
 - Never certify a product as genuine; the best positive result is "consistent with the
   registry, which does not prove authenticity".
 """
@@ -18,6 +18,7 @@ TITLES: dict[VerdictCode, str] = {
     VerdictCode.NOT_FOUND_IN_REGISTRY: "Not found in the registry",
     VerdictCode.EXPIRED_OR_INACTIVE: "Registration expired or inactive",
     VerdictCode.ALERT_MATCH: "Matches an official alert",
+    VerdictCode.KNOWN_TARGET: "Known target of a NAFDAC alert",
     VerdictCode.CANNOT_CONFIRM: "Cannot confirm",
 }
 
@@ -40,7 +41,11 @@ MESSAGES: dict[VerdictCode, str] = {
         "and the product details agree, but the registration is not current."
     ),
     VerdictCode.ALERT_MATCH: (
-        "This product matches a cited official alert. See the evidence for the source."
+        "This product matches a cited official NAFDAC alert. See the linked alert for details."
+    ),
+    VerdictCode.KNOWN_TARGET: (
+        "This product has been counterfeited before. Your batch is not in the alert. "
+        "Take the extra steps below."
     ),
     VerdictCode.CANNOT_CONFIRM: (
         "There is not enough evidence to confirm whether this product matches the "
