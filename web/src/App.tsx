@@ -1,152 +1,332 @@
-import { useCallback, useRef, useState } from "react";
-import { checkImage } from "./api";
-import type { CheckResponse } from "./types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { STRINGS, type Lang } from "./i18n";
+import type { CapturedPhoto, CheckInput, CheckResponse, RegistryStatus, SavedResult } from "./types";
+import { runCheck, fetchRegistryStatus } from "./api";
+import { clearSaved, deleteSaved, enqueueCheck, listQueue, listSaved, removeFromQueue, saveResult } from "./lib/idb";
+import { useOnline } from "./lib/net";
+import { makeId } from "./lib/image";
+import { tick } from "./lib/vibrate";
+import { Header } from "./components/Header";
+import { TabBar, type Tab } from "./components/TabBar";
+import { SettingsSheet, type TextSize } from "./components/SettingsSheet";
+import { ScanScreen } from "./screens/ScanScreen";
+import { CheckingScreen } from "./screens/CheckingScreen";
+import { ResultScreen } from "./screens/ResultScreen";
+import { AlertsScreen } from "./screens/AlertsScreen";
+import { ClaimsScreen } from "./screens/ClaimsScreen";
+import { SavedScreen } from "./screens/SavedScreen";
 
-type State =
-  | { kind: "idle" }
-  | { kind: "loading" }
-  | { kind: "done"; result: CheckResponse }
-  | { kind: "error"; message: string };
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
 
-const VERDICT_STYLES: Record<string, string> = {
-  CONSISTENT_WITH_REGISTRY: "bg-teal-50 border-teal-600 text-teal-900",
-  REGISTRY_MISMATCH: "bg-amber-50 border-amber-600 text-amber-900",
-  NOT_FOUND_IN_REGISTRY: "bg-orange-50 border-orange-600 text-orange-900",
-  EXPIRED_OR_INACTIVE: "bg-amber-50 border-amber-600 text-amber-900",
-  ALERT_MATCH: "bg-red-50 border-red-600 text-red-900",
-  CANNOT_CONFIRM: "bg-slate-50 border-slate-500 text-slate-800",
-};
+interface ActiveCheck {
+  input: CheckInput;
+  photos: CapturedPhoto[];
+  result: CheckResponse | null;
+  error: string | null;
+}
 
-const VERDICT_BADGE: Record<string, string> = {
-  CONSISTENT_WITH_REGISTRY: "bg-teal-600",
-  REGISTRY_MISMATCH: "bg-amber-600",
-  NOT_FOUND_IN_REGISTRY: "bg-orange-600",
-  EXPIRED_OR_INACTIVE: "bg-amber-600",
-  ALERT_MATCH: "bg-red-600",
-  CANNOT_CONFIRM: "bg-slate-500",
-};
-
-function fmtDate(iso: string | null): string {
-  if (!iso) return "unknown";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toUTCString();
+function loadJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 export default function App() {
-  const [state, setState] = useState<State>({ kind: "idle" });
-  const [preview, setPreview] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [tab, setTab] = useState<Tab>("scan");
+  const [lang, setLang] = useState<Lang>(() => loadJson<Lang>("lang", "en"));
+  const [textSize, setTextSize] = useState<TextSize>(() => loadJson<TextSize>("textSize", 100));
+  const [settings, setSettings] = useState<null | "settings" | "how">(null);
+  const [phase, setPhase] = useState<"capture" | "checking" | "result">("capture");
+  const [check, setCheck] = useState<ActiveCheck | null>(null);
+  const [saved, setSaved] = useState<SavedResult[]>([]);
+  const [keepPhotos, setKeepPhotos] = useState<boolean>(() => loadJson<boolean>("keepPhotos", false));
+  const [queueCount, setQueueCount] = useState(0);
+  const [registryStatus, setRegistryStatus] = useState<RegistryStatus | null>(null);
+  const [isSavedCurrent, setIsSavedCurrent] = useState(false);
+  const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
+  const [showInstall, setShowInstall] = useState(false);
+  const [prefill, setPrefill] = useState<{ nrn: string; product_name: string } | null>(null);
+  const online = useOnline();
 
-  const onFile = useCallback(async (file: File | undefined) => {
-    if (!file) return;
-    setPreview(URL.createObjectURL(file));
-    setState({ kind: "loading" });
-    try {
-      const result = await checkImage(file);
-      setState({ kind: "done", result });
-    } catch (err) {
-      setState({ kind: "error", message: err instanceof Error ? err.message : String(err) });
-    }
+  const s = STRINGS[lang];
+
+  // text size
+  useEffect(() => {
+    document.documentElement.style.fontSize = `${textSize}%`;
+    localStorage.setItem("textSize", JSON.stringify(textSize));
+  }, [textSize]);
+
+  useEffect(() => {
+    localStorage.setItem("lang", JSON.stringify(lang));
+    document.documentElement.lang = lang === "pcm" ? "en" : lang;
+  }, [lang]);
+
+  useEffect(() => {
+    localStorage.setItem("keepPhotos", JSON.stringify(keepPhotos));
+  }, [keepPhotos]);
+
+  // load saved + registry status + queue
+  useEffect(() => {
+    void listSaved().then(setSaved);
+    void fetchRegistryStatus().then((r) => setRegistryStatus(r));
+    void refreshQueue();
   }, []);
 
-  return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
-      <header className="bg-teal-700 text-white px-4 py-4">
-        <h1 className="text-2xl font-bold tracking-tight">Haske</h1>
-        <p className="text-teal-100 text-sm">Check a product against the NAFDAC registry</p>
-      </header>
+  const refreshQueue = useCallback(async () => {
+    setQueueCount((await listQueue()).length);
+  }, []);
 
-      <main className="max-w-md mx-auto p-4 space-y-4">
-        <section className="bg-white rounded-xl shadow-sm p-4 space-y-3">
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={(e) => onFile(e.target.files?.[0])}
-          />
-          <button
-            onClick={() => fileRef.current?.click()}
-            className="w-full py-3 bg-teal-600 text-white font-semibold rounded-lg active:bg-teal-700"
-          >
-            Take or choose a photo
-          </button>
-          {preview && (
-            <img src={preview} alt="product" className="w-full rounded-lg border border-slate-200" />
-          )}
-        </section>
+  // install prompt
+  useEffect(() => {
+    const onPrompt = (e: Event) => {
+      e.preventDefault();
+      setInstallEvent(e as BeforeInstallPromptEvent);
+    };
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    return () => window.removeEventListener("beforeinstallprompt", onPrompt);
+  }, []);
 
-        {state.kind === "loading" && (
-          <div className="bg-white rounded-xl shadow-sm p-6 text-center text-slate-500">
-            <div className="animate-spin h-8 w-8 border-4 border-teal-600 border-t-transparent rounded-full mx-auto mb-2" />
-            Checking the registry...
-          </div>
-        )}
+  const completedChecks = useRef(loadJson<number>("checksCompleted", 0));
 
-        {state.kind === "error" && (
-          <div className="bg-red-50 border border-red-300 text-red-800 rounded-xl p-4">
-            Something went wrong: {state.message}
-          </div>
-        )}
-
-        {state.kind === "done" && <VerdictCard result={state.result} />}
-      </main>
-    </div>
+  const runCheckFlow = useCallback(
+    async (input: CheckInput, photos: CapturedPhoto[]) => {
+      if (!online) {
+        await enqueueCheck(input);
+        await refreshQueue();
+        return;
+      }
+      setPhase("checking");
+      setCheck({ input, photos, result: null, error: null });
+      setIsSavedCurrent(false);
+      try {
+        const response = await runCheck(input);
+        setCheck({ input, photos, result: response, error: null });
+        setPhase("result");
+        tick();
+        // cache the last result in the service worker
+        if ("serviceWorker" in navigator) {
+          const reg = await navigator.serviceWorker.getRegistration();
+          reg?.active?.postMessage({ type: "SAVE_RESULT", result: { id: makeId(), response } });
+        }
+        completedChecks.current += 1;
+        localStorage.setItem("checksCompleted", JSON.stringify(completedChecks.current));
+        const dismissed = localStorage.getItem("installDismissed");
+        if (completedChecks.current >= 2 && installEvent && !dismissed) {
+          setShowInstall(true);
+        }
+      } catch (err) {
+        setCheck({ input, photos, result: null, error: err instanceof Error ? err.message : String(err) });
+        setPhase("result");
+      }
+    },
+    [online, installEvent, refreshQueue]
   );
-}
 
-function VerdictCard({ result }: { result: CheckResponse }) {
-  const { verdict, extraction, nrn } = result;
-  const style = VERDICT_STYLES[verdict.code] ?? VERDICT_STYLES.CANNOT_CONFIRM;
-  const badge = VERDICT_BADGE[verdict.code] ?? VERDICT_BADGE.CANNOT_CONFIRM;
-  const asOf = verdict.evidence[0]?.retrieved_at ?? null;
+  // drain queue when back online
+  const draining = useRef(false);
+  useEffect(() => {
+    if (!online) return;
+    if (draining.current) return;
+    draining.current = true;
+    void (async () => {
+      const items = await listQueue();
+      for (const item of items) {
+        try {
+          await runCheck(item.input);
+        } catch {
+          /* leave in queue; keep it */
+        }
+        await removeFromQueue(item.id);
+      }
+      await refreshQueue();
+      draining.current = false;
+    })();
+  }, [online, refreshQueue]);
+
+  const handleSubmit = useCallback(
+    (input: CheckInput) => {
+      const photos = input.kind === "image" ? input.photos : [];
+      void runCheckFlow(input, photos);
+    },
+    [runCheckFlow]
+  );
+
+  const handleCheckAnother = useCallback(() => {
+    setPhase("capture");
+    setCheck(null);
+    setIsSavedCurrent(false);
+    setTab("scan");
+  }, []);
+
+  const handleEdit = useCallback(
+    (input: CheckInput) => {
+      const nrn = check?.result?.nrn.canonical || (input.kind === "fields" ? input.nrn : "") || "";
+      const name = check?.result?.extraction.product_name || (input.kind === "fields" ? input.product_name : "") || "";
+      setPrefill({ nrn, product_name: name });
+      setPhase("capture");
+      setCheck(null);
+      setTab("scan");
+    },
+    [check]
+  );
+
+  const handleSave = useCallback(async () => {
+    if (!check?.result) return;
+    const photos = keepPhotos ? check.photos : [];
+    const entry: SavedResult = {
+      id: makeId(),
+      savedAt: new Date().toISOString(),
+      outcome: check.result,
+      keepPhotos,
+      photos,
+    };
+    await saveResult(entry);
+    setSaved(await listSaved());
+    setIsSavedCurrent(true);
+    tick();
+  }, [check, keepPhotos]);
+
+  const handleDelete = useCallback(async (id: string) => {
+    await deleteSaved(id);
+    setSaved(await listSaved());
+  }, []);
+
+  const handleDeleteAll = useCallback(async () => {
+    if (!window.confirm(STRINGS[lang].deleteConfirm)) return;
+    await clearSaved();
+    setSaved(await listSaved());
+  }, [lang]);
+
+  const handleClearData = useCallback(async () => {
+    await clearSaved();
+    setSaved([]);
+    localStorage.removeItem("checksCompleted");
+    setSettings(null);
+  }, []);
+
+  const handleInstall = useCallback(async () => {
+    if (!installEvent) return;
+    await installEvent.prompt();
+    await installEvent.userChoice;
+    setShowInstall(false);
+    setInstallEvent(null);
+  }, [installEvent]);
+
+  const handleDismissInstall = useCallback(() => {
+    localStorage.setItem("installDismissed", "1");
+    setShowInstall(false);
+  }, []);
+
+  const handleOpenSaved = useCallback((item: SavedResult) => {
+    setCheck({
+      input: { kind: "fields", nrn: item.outcome.nrn.canonical || "", product_name: item.outcome.extraction.product_name || "" },
+      photos: item.photos,
+      result: item.outcome,
+      error: null,
+    });
+    setIsSavedCurrent(true);
+    setPhase("result");
+    setTab("scan");
+  }, []);
+
+  const handleCheckLast = useCallback(() => {
+    /* No alert feed yet; the Alerts tab already shows an honest empty state. */
+  }, []);
+
+  const frontThumb = useMemo(() => {
+    if (check?.photos.length) return check.photos[0].dataUrl;
+    return null;
+  }, [check]);
+
+  const showTabs = phase !== "checking";
 
   return (
-    <section className={`rounded-xl shadow-sm border-2 ${style} overflow-hidden`}>
-      <div className={`${badge} text-white px-4 py-2 font-semibold`}>{verdict.title}</div>
-      <div className="p-4 space-y-3">
-        <p className="text-sm">{verdict.message}</p>
+    <div className="app">
+      <div className="desktop-note">{s.desktopNote}</div>
+      <div className="app-column">
+        <Header s={s} onSettings={() => setSettings("settings")} />
 
-        <dl className="text-sm space-y-1 border-t border-black/10 pt-2">
-          <div className="flex justify-between">
-            <dt className="text-black/60">Product</dt>
-            <dd className="font-medium">{extraction.product_name ?? "unreadable"}</dd>
+        {online ? null : (
+          <div className="notice notice-warn" style={{ margin: "8px 16px 0" }}>
+            <span>{s.offline}</span>
           </div>
-          <div className="flex justify-between">
-            <dt className="text-black/60">Registration no.</dt>
-            <dd className="font-medium">{nrn.canonical ?? "unreadable"}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-black/60">Checked</dt>
-            <dd className="font-medium">{fmtDate(asOf)}</dd>
-          </div>
-        </dl>
-
-        {verdict.evidence.length > 0 && (
-          <div className="text-sm border-t border-black/10 pt-2">
-            <p className="font-semibold mb-1">Evidence</p>
-            <ul className="space-y-1">
-              {verdict.evidence.map((e, i) => (
-                <li key={i}>
-                  {e.source_url ? (
-                    <a href={e.source_url} target="_blank" rel="noreferrer" className="underline">
-                      {e.source}
-                    </a>
-                  ) : (
-                    <span>{e.source}</span>
-                  )}
-                  {e.note ? <span className="text-black/60"> - {e.note}</span> : null}
-                </li>
-              ))}
-            </ul>
+        )}
+        {queueCount > 0 && online && (
+          <div className="notice notice-info" style={{ margin: "8px 16px 0" }}>
+            <span>{s.queuedSending}</span>
           </div>
         )}
 
-        {verdict.footer && (
-          <p className="text-xs text-black/70 border-t border-black/10 pt-2">{verdict.footer}</p>
-        )}
+        <main className="main">
+          {tab === "scan" && phase === "capture" && (
+            <ScanScreen s={s} active={tab === "scan"} onSubmit={handleSubmit} prefill={prefill} onClearPrefill={() => setPrefill(null)} />
+          )}
+          {tab === "scan" && phase === "checking" && <CheckingScreen s={s} thumbnail={frontThumb} onCancel={() => handleCheckAnother()} />}
+          {tab === "scan" && phase === "result" && check && (
+            <ResultScreen
+              s={s}
+              result={check.result}
+              error={check.error}
+              input={check.input}
+              photos={check.photos}
+              isSaved={isSavedCurrent}
+              onSave={() => void handleSave()}
+              onCheckAnother={handleCheckAnother}
+              onEdit={handleEdit}
+              registryStatus={registryStatus}
+              onOpenHow={() => setSettings("how")}
+            />
+          )}
+          {tab === "alerts" && <AlertsScreen s={s} onCheckLast={handleCheckLast} />}
+          {tab === "claims" && <ClaimsScreen s={s} />}
+          {tab === "saved" && (
+            <SavedScreen
+              s={s}
+              saved={saved}
+              keepPhotos={keepPhotos}
+              onToggleKeepPhotos={() => setKeepPhotos((v) => !v)}
+              onOpen={handleOpenSaved}
+              onDelete={(id) => void handleDelete(id)}
+              onDeleteAll={() => void handleDeleteAll()}
+            />
+          )}
+        </main>
+
+        {showTabs && <TabBar tab={tab} onChange={setTab} s={s} />}
       </div>
-    </section>
+
+      {settings && (
+        <SettingsSheet
+          s={s}
+          lang={lang}
+          onLang={setLang}
+          textSize={textSize}
+          onTextSize={setTextSize}
+          onClearData={() => void handleClearData()}
+          onClose={() => setSettings(null)}
+          initialHow={settings === "how"}
+        />
+      )}
+
+      {showInstall && (
+        <div className="sheet" role="dialog" aria-label={s.installPrompt}>
+          <p className="help" style={{ marginBottom: 12 }}>{s.installPrompt}</p>
+          <div className="btn-row">
+            <button type="button" className="btn btn-primary btn-block" onClick={() => void handleInstall()}>
+              {s.installNow}
+            </button>
+            <button type="button" className="btn btn-secondary btn-block" onClick={handleDismissInstall}>
+              {s.installLater}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

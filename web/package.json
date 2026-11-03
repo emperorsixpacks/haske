@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && node scripts/copy-lint.mjs && vite build",
+    "lint:copy": "node scripts/copy-lint.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
