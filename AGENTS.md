@@ -1,0 +1,95 @@
+# AGENTS.md
+
+Haske: an AI product-authenticity checker for Nigeria. Photograph a product, extract the
+NAFDAC registration number (NRN) and label fields, cross-check against NAFDAC registries,
+return a deterministic evidence-backed verdict. The LLM only extracts fields and explains a
+verdict code already decided by code.
+
+## Hard product rules (easy to violate, not obvious from filenames)
+
+- No em dashes anywhere: not in code comments, docs, or UI text. Use commas/parens instead.
+- Verdicts are decided only by deterministic code in `api/verdict/engine.py`. Never let a
+  model pick the verdict.
+- Language rules in `api/verdict/messages.py`: say "indicators found" and "the register
+  shows"; never write "fake" or "counterfeit" unless a cited official alert matches product
+  AND batch (milestone 2, `ALERT_MATCH` is reserved). Never certify a product as genuine;
+  the best positive result is "consistent with the registry, which does not prove authenticity".
+- Medicines append a pharmacist footer; never give dosing or take/stop advice
+  (`api/verdict/safety.py`).
+- Never persist user photos. Log only non-identifying metrics.
+- Never persist contact fields (email/phone/address); `api/registries/greenbook.py` strips them.
+
+## Commands
+
+```bash
+uv sync                                   # installs deps + dev group (incl. pytest)
+uv run pytest -q                          # run all tests (testpaths = api/tests)
+uv run pytest api/tests/test_nrn.py -q    # run one file
+uv run pytest api/tests/test_nrn.py::test_reject_barcode -q   # run one test
+
+uv run uvicorn api.app.main:app --reload  # backend (MOCK mode if META_API_KEY unset)
+cd web && npm install && npm run dev      # frontend -> http://localhost:5173 (proxies /v1 to :8000)
+cd web && npm run build                   # typecheck (tsc -b) + vite build
+
+uv run python -m api.cli probe            # 3 Greenbook rows, prints raw fields
+uv run python -m api.cli fetch            # full Greenbook snapshot (~18 pages, ~2 min, 2s delay)
+uv run python -m api.cli verify <NRN> --category <name>   # NAPAMS lookup (needs playwright)
+uv run python -m api.cli smoke            # verify META_API_KEY + vision model with a real call
+uv run python eval/run_eval.py            # eval report
+uv run playwright install chromium        # one-time, for NAPAMS verify
+```
+
+There is no Python linter or typecheck configured; `pytest` is the gate. The web build runs
+`tsc` as the typecheck.
+
+## Layout and entrypoints
+
+- Package is `api/` (flat, installed as `haske` via hatchling `[tool.hatch...] packages=["api"]`),
+  NOT a `src/` layout. Imports are `from api.app.config import ...`.
+- Entrypoint: `api/app/main.py` (FastAPI). Orchestration lives in `api/app/service.py`
+  (`CheckService.check_image` / `check_fields` -> extract -> NRN -> lookup -> match -> verdict).
+- `api/registries/` = data sources. `api/verdict/` = verdict engine + message templates.
+  `api/extraction/` = Meta vision client + MOCK fixture reader.
+- `api/cli.py` is the CLI. `eval/` is standalone (not a package; it imports `api`).
+
+## Environment / MOCK mode
+
+- Config is `api/app/config.py` (pydantic-settings, reads `.env`). Copy `.env.example` -> `.env`.
+- `META_API_KEY` unset = MOCK mode: `api/extraction/mock.py` reads fixtures from
+  `api/extraction/fixtures/<filename>.json`, and `api/registries/demo.py` seeds a demo
+  Greenbook snapshot. Everything works end to end with no key.
+- Set `META_API_KEY` for live vision. Model vars: `META_API_BASE_URL` (default
+  `https://api.meta.ai/v1`), `META_VISION_MODEL` (default `muse-spark-1.3`). Never hardcode them.
+- `HASKE_DATA_DIR` overrides the SQLite location (default `api/data`, gitignored).
+
+## Data source gotchas (hard-earned, verified live)
+
+- Greenbook (`greenbook.nafdac.gov.ng`) is a Laravel DataTables JSON feed at the site root
+  (`X-Requested-With: XMLHttpRequest`, params `start`/`length`/`draw`; `recordsTotal` 8950).
+  The NRN is the `NAFDAC` key (e.g. `A4-100160`), NOT `nrn`. `product_name` may carry trailing
+  `##`/`*` to strip. There is no manufacturer NAME, only `manufacturer_id`. Field map is
+  `_FIELD_KEYS` in `api/registries/greenbook.py`.
+- NAPAMS (`registration.nafdac.gov.ng`) verify form POSTs `/Home/VerifyProduct` with input
+  `CertificateNumber`, but is behind an invisible reCAPTCHA that silently blocks headless /
+  datacenter IPs (returns `recaptcha_blocked`). Response parsing is `parse_verify_text` in
+  `api/registries/napams.py`. Cosmetics/soaps route to NAPAMS, not a "no source" fallback.
+- NRN normaliser (`api/registries/nrn.py`): 12-13 digit strings are barcodes, rejected; `O`
+  vs `0` ambiguity is flagged, never guessed.
+
+## Testing quirks
+
+- Playwright is never launched in tests. NAPAMS is tested via fakes and the pure
+  `parse_verify_text` function (see `api/tests/test_napams.py` for the real response fixture).
+- `api/tests/test_api.py` uses `TestClient` and sets `HASKE_DATA_DIR` to a tmp path and
+  deletes `META_API_KEY`, so it runs in MOCK mode regardless of your `.env`. It emits a
+  harmless `StarletteDeprecationWarning` about `httpx`/`httpx2`.
+- `api/registries/store.py` uses sqlite3 with a lock and `check_same_thread=False` because
+  FastAPI sync endpoints run in a threadpool; keep the lock when editing.
+- SQL in `store.py` is written to be Postgres-portable (no sqlite-only features in statements).
+
+## Eval
+
+- `eval/labels.csv` columns: `image, true_nrn, true_batch, true_expiry, expected_verdict`.
+- Predicted extractions are JSON fixtures at `eval/photos/<image>.json` (no real photos yet).
+  `run_eval.py` seeds a demo registry and reports NRN/batch/expiry exact-match, verdict
+  agreement, false-accusation rate, and abstention rate.
