@@ -78,7 +78,8 @@ class LookupResult(BaseModel):
     source_url: str | None = None
 
     @property
-    def found(self) -> bool:
+    def is_found(self) -> bool:
+        """True when the outcome is FOUND. The classmethod constructor is LookupResult.found()."""
         return self.outcome == LookupOutcome.FOUND
 
     @classmethod

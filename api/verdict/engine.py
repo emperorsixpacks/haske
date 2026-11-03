@@ -123,6 +123,22 @@ def decide(
             evidence=_lookup_evidence(lookup, match, category, retrieved_at),
         )
 
+    # Milestone 2: check public alerts before declaring consistent.
+    # The alert registry is empty in milestone 1, so this is always a no-op.
+    from ..registries.alerts import get_alert_registry
+    alert = get_alert_registry().lookup(lookup.nrn or "", None)
+    if alert is not None:
+        return Verdict(
+            code=VerdictCode.ALERT_MATCH,
+            title="Matches an official alert",
+            message=(
+                "This product matches a cited official NAFDAC alert. "
+                "The register shows indicators found: see the evidence for the source."
+            ),
+            footer=_footer_for(category),
+            evidence=_lookup_evidence(lookup, match, category, retrieved_at),
+        )
+
     return Verdict(
         code=VerdictCode.CONSISTENT_WITH_REGISTRY,
         title="Consistent with the registry",
