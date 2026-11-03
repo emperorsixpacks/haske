@@ -18,7 +18,7 @@ from ..registries.router import RegistryRouter
 from ..registries.store import Store
 from ..verdict.engine import decide
 from .config import Settings
-from .schemas import AlertReference, CheckResponse, NrnInfo
+from .schemas import AlertReference, CheckResponse, NrnInfo, TraceEventModel
 
 _GUESS_TO_CATEGORY = {
     "drug": RegistryCategory.DRUG,
@@ -79,7 +79,15 @@ class CheckService:
 
     def check_image(self, image_bytes: bytes, filename: str | None = None) -> CheckResponse:
         extraction = self.extractor.extract(image_bytes, filename)
-        return self._evaluate(extraction)
+        response = self._evaluate(extraction)
+        # Escalation ladder: only run the investigator agent on a trigger, and only when
+        # enabled. The deterministic response is always the fallback.
+        if self.settings.investigator_enabled and self._should_escalate(response, extraction):
+            outcome = self._run_agent(extraction, image_bytes, response)
+            response.agent_trace = [TraceEventModel(**e) for e in outcome.trace.to_list()]
+            response.trace_summary = outcome.trace.summary_line()
+            response.agent_report = outcome.report
+        return response
 
     def check_fields(self, fields: dict) -> CheckResponse:
         extraction = ExtractionResult(
@@ -184,17 +192,24 @@ class CheckService:
         )
 
     def investigate(self, image_bytes: bytes, filename: str | None = None) -> dict:
-        """Run the investigator agent as an escalation layer over the deterministic check.
-
-        The deterministic pipeline always runs first and is returned as the fallback. The
-        agent loop may produce a richer report and a trace; on budget/timeout/error the
-        caller uses the fallback.
-        """
-        from ..agent.loop import run_agent
-        from ..agent.tools import AgentContext
-
+        """Run the investigator agent as an escalation layer over the deterministic check."""
         extraction = self.extractor.extract(image_bytes, filename)
         baseline = self._evaluate(extraction)
+        outcome = self._run_agent(extraction, image_bytes, baseline)
+        return {
+            "outcome": outcome.outcome,
+            "report": outcome.report,
+            "question": outcome.question,
+            "trace": outcome.trace.to_list(),
+            "trace_summary": outcome.trace.summary_line(),
+            "rounds": outcome.rounds,
+            "fallback_verdict": baseline.verdict.code.value,
+            "fallback_alert": baseline.alert.model_dump() if baseline.alert else None,
+        }
+
+    def _run_agent(self, extraction: ExtractionResult, image_bytes: bytes, baseline: CheckResponse):
+        from ..agent.loop import AgentOutcome, run_agent
+        from ..agent.tools import AgentContext
 
         category = category_from_guess(extraction.category_guess)
         consistency = check_consistency(extraction)
@@ -210,18 +225,13 @@ class CheckService:
             category=category,
             consistency_flags=consistency.flags,
         )
-        outcome = run_agent(settings=self.settings, ctx=ctx)
+        return run_agent(settings=self.settings, ctx=ctx)
 
-        return {
-            "outcome": outcome.outcome,
-            "report": outcome.report,
-            "question": outcome.question,
-            "trace": outcome.trace.to_list(),
-            "trace_summary": outcome.trace.summary_line(),
-            "rounds": outcome.rounds,
-            "fallback_verdict": baseline.verdict.code.value,
-            "fallback_alert": baseline.alert.model_dump() if baseline.alert else None,
-        }
+    def _should_escalate(self, response: CheckResponse, extraction: ExtractionResult) -> bool:
+        """Escalate to the agent only when there is a real signal to investigate."""
+        if response.alert is not None:
+            return True
+        return bool(check_consistency(extraction).flags)
 
     def _snapshot_time(self) -> dt.datetime | None:
         snap = self.store.latest_snapshot()

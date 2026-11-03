@@ -41,14 +41,6 @@ class AlertReference(BaseModel):
     fuzzy: bool = False
 
 
-class CheckResponse(BaseModel):
-    extraction: ExtractionResult
-    nrn: NrnInfo
-    match_outcome: str
-    verdict: Verdict
-    alert: AlertReference | None = None
-
-
 class TraceEventModel(BaseModel):
     round: int
     tool: str
@@ -57,6 +49,17 @@ class TraceEventModel(BaseModel):
     tokens: int
     status: str
     summary: str
+
+
+class CheckResponse(BaseModel):
+    extraction: ExtractionResult
+    nrn: NrnInfo
+    match_outcome: str
+    verdict: Verdict
+    alert: AlertReference | None = None
+    agent_trace: list[TraceEventModel] = []
+    trace_summary: str | None = None
+    agent_report: dict | None = None
 
 
 class InvestigateResponse(BaseModel):
