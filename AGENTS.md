@@ -29,7 +29,8 @@ uv run pytest api/tests/test_nrn.py::test_reject_barcode -q   # run one test
 
 uv run uvicorn api.app.main:app --reload  # backend (MOCK mode if META_API_KEY unset)
 cd web && npm install && npm run dev      # frontend -> http://localhost:5173 (proxies /v1 to :8000)
-cd web && npm run build                   # typecheck (tsc -b) + vite build
+cd web && npm run build                   # tsc -b + copy lint + vite build
+cd web && npm run lint:copy               # copy lint only (banned words outside src/i18n.ts)
 
 uv run python -m api.cli probe            # 3 Greenbook rows, prints raw fields
 uv run python -m api.cli fetch            # full Greenbook snapshot (~18 pages, ~2 min, 2s delay)
@@ -40,7 +41,8 @@ uv run playwright install chromium        # one-time, for NAPAMS verify
 ```
 
 There is no Python linter or typecheck configured; `pytest` is the gate. The web build runs
-`tsc` as the typecheck.
+`tsc` as the typecheck plus a copy lint (`web/scripts/copy-lint.mjs`) that fails on the words
+"fake", "counterfeit", or "genuine" anywhere outside `src/i18n.ts` (the centralized copy).
 
 ## Layout and entrypoints
 
@@ -51,6 +53,25 @@ There is no Python linter or typecheck configured; `pytest` is the gate. The web
 - `api/registries/` = data sources. `api/verdict/` = verdict engine + message templates.
   `api/extraction/` = Meta vision client + MOCK fixture reader.
 - `api/cli.py` is the CLI. `eval/` is standalone (not a package; it imports `api`).
+- Frontend is `web/` (Vite + React + TS, mobile-only PWA). No Tailwind: plain CSS tokens in
+  `web/src/styles.css`. Structure: `web/src/screens/` (Scan, Checking, Result, Alerts, Claims,
+  Saved), `web/src/components/`, `web/src/lib/` (IndexedDB, image processing, verdict mapping,
+  share, haptics, net), `web/src/i18n.ts` (EN + Pidgin string dictionary). All user-facing copy
+  must live in `i18n.ts`, not inline. PWA assets are in `web/public/` (manifest, service worker,
+  self-hosted Inter font, icons).
+
+## Frontend conventions
+
+- Camera-first: the app opens on the Scan tab, no landing page. It is a phone-only PWA; a
+  desktop viewport renders a centered 430px column with a "use your phone" note.
+- All user-facing strings go through `web/src/i18n.ts`. Verdict wording is decided client-side
+  from the deterministic `verdict.code`/`match_outcome` in `web/src/lib/verdict.ts`; it never
+  adds its own verdict. A registry timeout/outage is its own slate state, never a negative
+  verdict.
+- Client-side photo processing in `web/src/lib/image.ts` downscales to 1280px, re-encodes JPEG
+  q0.7, and strips EXIF (incl. location) via canvas. Never persist photos on the server.
+- Saved results and the offline queue live only in IndexedDB (`web/src/lib/idb.ts`). The service
+  worker caches the app shell, the font, and the last 20 results, not registry lookups.
 
 ## Environment / MOCK mode
 

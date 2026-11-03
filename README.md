@@ -13,9 +13,24 @@ Built for the Meta Global AI Developer Hackathon.
 ## Stack
 
 - Backend: Python 3.12, FastAPI, uv, SQLite (Postgres-compatible SQL), pytest, httpx.
-- Web: Vite + React + TypeScript + Tailwind, mobile-first, one page.
+- Web: Vite + React + TypeScript, mobile-only PWA (camera first). Plain CSS design tokens, no
+  Tailwind. Manifest + service worker for installability and offline shell.
 - Models: Meta Model API (OpenAI-compatible). Base URL and model ids come from env vars, never
   hardcoded. With no `META_API_KEY` set, Haske runs in MOCK mode using fixtures end to end.
+
+### Which model does what
+
+A single configurable Meta model (`META_VISION_MODEL`, default `muse-spark-1.3`) performs both
+model-backed steps, and it never chooses a verdict:
+
+1. **Label extraction** (vision): reads the product photo and returns the structured fields
+   (`product_name`, `nrn`, `batch`, dates, `manufacturer`, `strength`, `category_guess`) plus
+   per-field confidence. See `api/extraction/vision.py`.
+2. **Verdict explanation** (text): writes a plain-language, one-to-two-sentence expansion of a
+   verdict code that deterministic code in `api/verdict/engine.py` has already decided. See
+   `api/extraction/explain.py`.
+
+Every verdict is decided by deterministic code, never by a model.
 
 ## Quick start
 
@@ -31,6 +46,7 @@ uv run python -m api.cli fetch
 # Web (from /web)
 npm install
 npm run dev
+npm run build   # typecheck (tsc) + copy lint + vite build
 
 # Eval harness
 uv run python eval/run_eval.py

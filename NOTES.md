@@ -11,8 +11,8 @@ as the build proceeds. Andrew reviews this to know what was verified vs assumed.
 - Vision-capable hosted model ids: `muse-spark-1.3` (recommended), `muse-spark-1.2`,
   `muse-spark-1.1`, `muse-wonder-1.0`. Default for `META_VISION_MODEL` is `muse-spark-1.3`.
 - Local toolchain: Python 3.12.13 available via uv, Node 22, npm 10.
-- Full pytest suite passes: 58 tests (NRN, matcher, greenbook, napams, verdict, extraction,
-  service, API). `uv run pytest -q` -> 58 passed.
+- Full pytest suite passes: 77 tests (NRN, matcher, greenbook, napams, verdict, extraction,
+  service, API). `uv run pytest -q` -> 77 passed.
 - Live server smoke test (uvicorn, real HTTP): `GET /v1/health` -> ok; `GET /v1/registry/status`
   -> source/date/count; `POST /v1/check/fields` returns CONSISTENT_WITH_REGISTRY (with footer +
   evidence), REGISTRY_MISMATCH, NOT_FOUND_IN_REGISTRY as expected; `POST /v1/check` (multipart
@@ -20,7 +20,12 @@ as the build proceeds. Andrew reviews this to know what was verified vs assumed.
 - Eval harness runs now (`uv run python eval/run_eval.py`): 6/6 verdict agreement, 0 false
   accusations, NRN/batch/expiry exact-match 5/6 (the misses are the deliberate null-NRN and
   wrong-batch fixtures).
-- Web frontend builds clean: `npm run build` -> 148 kB JS, no type errors.
+- Web frontend builds clean: `npm run build` -> 61 kB gzipped JS, no type errors, copy lint
+  passes. Rebuilt as a camera-first, phone-only PWA (plain CSS tokens, no Tailwind) with
+  self-hosted Inter, manifest + service worker + icons, bottom tabs, an EN/Pidgin string
+  dictionary (`web/src/i18n.ts`), and verdict presentation mapped from the deterministic
+  `verdict.code` in `web/src/lib/verdict.ts`. The copy lint fails the build on
+  "fake"/"counterfeit"/"genuine" outside `src/i18n.ts`.
 - NAPAMS verify form is VERIFIED against live HTML (fetched 2026-10-27): a single form on the
   home page (`#verify`) POSTing to `/Home/VerifyProduct`, with input
   `id="CertificateNumber" name="CertificateNumber"`, a `__RequestVerificationToken` hidden
@@ -53,6 +58,12 @@ as the build proceeds. Andrew reviews this to know what was verified vs assumed.
 - Greenbook `manufacturer`: the search feed exposes only `manufacturer_id`, not a name, so
   the snapshot's `manufacturer` is None. Enriching it would require the `/manufacturers`
   list or per-product `/products/details/{id}` pages (not done in milestone 1).
+- Web UI is not covered by automated browser tests yet: the spec'd Playwright (360x800 and
+  412x915, throttled network) and Lighthouse (perf/accessibility/PWA > 90) runs need a
+  Playwright browser install and are not wired up.
+- "Report a concern" in the Result screen links to the NAFDAC domain root (`web/src/lib/links.ts`)
+  because the exact official reporting channel/contact has not been verified; do not ship a
+  specific contact number until it is confirmed against an official NAFDAC source.
 
 ## Assumptions (NOT verified)
 
@@ -94,3 +105,9 @@ as the build proceeds. Andrew reviews this to know what was verified vs assumed.
 - Add real photos + labels.csv rows (Andrew to supply 20).
 - Wire the SAM 3.1 `preprocess` crop (milestone 2) and the public-alert parser (ALERT_MATCH).
 - Route the LLM explanation layer through `verdict/safety.is_medical_advice_request`.
+- Web: add a real alerts/recalls feed and a claims-check source. The Alerts and Claims tabs are
+  honest empty states until a backend source exists (`[BACKEND]` items). Batch-code anomaly is a
+  clearly-labelled client heuristic in `web/src/lib/batch.ts`, not a verdict input.
+- Web: register a Web Share Target for text so Android Chrome users can share from WhatsApp into
+  the Claims tab (not wired yet).
+- Web: add the Playwright + Lighthouse test suite (see "Not verified" above).
