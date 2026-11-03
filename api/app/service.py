@@ -227,6 +227,30 @@ class CheckService:
         )
         return run_agent(settings=self.settings, ctx=ctx)
 
+    def check_images(self, images: list[tuple[bytes, str | None]]) -> dict:
+        """Extract multiple label views and run the cross-view consistency check.
+
+        images is a list of (bytes, filename). Returns per-view fields plus any
+        CROSS_VIEW_MISMATCH signals. This is the backend hook for the multi-view
+        capture flow (front, back, batch panel).
+        """
+        from ..extraction.cross_view import cross_view_check
+
+        views: list[dict] = []
+        for image_bytes, filename in images:
+            ext = self.extractor.extract(image_bytes, filename)
+            views.append({
+                "filename": filename,
+                "product_name": ext.product_name,
+                "nrn": ext.nrn,
+                "manufacturer": ext.manufacturer,
+                "strength": ext.strength,
+                "batch": ext.batch,
+                "expiry_date": ext.expiry_date,
+            })
+        cross_view = cross_view_check(views).to_dict()
+        return {"views": views, "cross_view": cross_view}
+
     def _should_escalate(self, response: CheckResponse, extraction: ExtractionResult) -> bool:
         """Escalate to the agent only when there is a real signal to investigate."""
         if response.alert is not None:
