@@ -62,15 +62,25 @@ def decide(
     match: MatchResult,
     category: RegistryCategory,
     retrieved_at: dt.datetime | None = None,
+    consistency_flags: list[str] | None = None,
+    batch_conflict_note: str | None = None,
 ) -> Verdict:
-    """Decide a verdict deterministically from lookup + match outcomes."""
+    """Decide a verdict deterministically from lookup + match outcomes.
+
+    consistency_flags: output of api/extraction/consistency.check_consistency()
+    batch_conflict_note: output of api/observations/store.ConflictResult.to_note()
+    Both are evidence signals only. They never change the verdict code.
+    """
+    consistency_flags = consistency_flags or []
+    signals = _build_signals_note(consistency_flags, batch_conflict_note)
+
     if lookup.outcome == LookupOutcome.CHECK_INCOMPLETE:
         return Verdict(
             code=VerdictCode.CANNOT_CONFIRM,
             title="Cannot confirm",
             message="There is not enough evidence to confirm this product. The register could not be checked: "
             + (lookup.reason or "source unavailable"),
-            evidence=_lookup_evidence(lookup, match, category, retrieved_at),
+            evidence=_lookup_evidence(lookup, match, category, retrieved_at, signals),
             abstained=True,
         )
 
@@ -80,7 +90,7 @@ def decide(
             title="Not found in the registry",
             message="The registration number was not found in the registry. It may be invalid or the product is not listed in the sources we can check.",
             footer=_footer_for(category),
-            evidence=_lookup_evidence(lookup, match, category, retrieved_at),
+            evidence=_lookup_evidence(lookup, match, category, retrieved_at, signals),
         )
 
     # FOUND
@@ -90,7 +100,7 @@ def decide(
             title="Registry mismatch",
             message="Indicators found: the registration number exists, but the register shows it belongs to a different product.",
             footer=_footer_for(category),
-            evidence=_lookup_evidence(lookup, match, category, retrieved_at),
+            evidence=_lookup_evidence(lookup, match, category, retrieved_at, signals),
         )
 
     if match.outcome == MatchOutcome.AMBIGUOUS:
@@ -99,7 +109,7 @@ def decide(
             title="Cannot confirm",
             message="The registration number is shared by more than one product, so we cannot confirm which one the label refers to.",
             footer=_footer_for(category),
-            evidence=_lookup_evidence(lookup, match, category, retrieved_at),
+            evidence=_lookup_evidence(lookup, match, category, retrieved_at, signals),
             abstained=True,
         )
 
@@ -109,7 +119,7 @@ def decide(
             title="Cannot confirm",
             message="The number exists but there is not enough label information to confirm the product.",
             footer=_footer_for(category),
-            evidence=_lookup_evidence(lookup, match, category, retrieved_at),
+            evidence=_lookup_evidence(lookup, match, category, retrieved_at, signals),
             abstained=True,
         )
 
@@ -121,7 +131,7 @@ def decide(
             title="Registration expired or inactive",
             message="The register shows this registration is expired or inactive.",
             footer=_footer_for(category),
-            evidence=_lookup_evidence(lookup, match, category, retrieved_at),
+            evidence=_lookup_evidence(lookup, match, category, retrieved_at, signals),
         )
 
     # Milestone 2: check public alerts before declaring consistent.
@@ -137,7 +147,7 @@ def decide(
                 "The register shows indicators found: see the evidence for the source."
             ),
             footer=_footer_for(category),
-            evidence=_lookup_evidence(lookup, match, category, retrieved_at),
+            evidence=_lookup_evidence(lookup, match, category, retrieved_at, signals),
         )
 
     return Verdict(
@@ -145,8 +155,21 @@ def decide(
         title="Consistent with the registry",
         message="The label is consistent with the registry, which does not prove authenticity.",
         footer=_footer_for(category),
-        evidence=_lookup_evidence(lookup, match, category, retrieved_at),
+        evidence=_lookup_evidence(lookup, match, category, retrieved_at, signals),
     )
+
+
+def _build_signals_note(
+    consistency_flags: list[str],
+    batch_conflict_note: str | None,
+) -> str | None:
+    """Combine consistency flags and batch conflict into a single evidence note string."""
+    parts: list[str] = []
+    if consistency_flags:
+        parts.append("signals=" + ",".join(consistency_flags))
+    if batch_conflict_note:
+        parts.append(batch_conflict_note)
+    return "; ".join(parts) if parts else None
 
 
 def _footer_for(category: RegistryCategory) -> str | None:
@@ -168,30 +191,36 @@ def _lookup_evidence(
     match: MatchResult,
     category: RegistryCategory,
     retrieved_at: dt.datetime | None,
+    signals_note: str | None = None,
 ) -> list[Evidence]:
     evidence: list[Evidence] = []
     if lookup.records:
         for record in lookup.records:
+            base_note = f"nrn={record.nrn} product={record.product_name}"
+            note = f"{base_note}; {signals_note}" if signals_note else base_note
             evidence.append(
                 Evidence(
                     source=record.source or lookup.source or "registry",
                     source_url=record.source_url or lookup.source_url,
                     retrieved_at=record.retrieved_at or retrieved_at,
                     fields_compared=[_cmp_to_dict(c) for c in match.comparisons],
-                    note=f"nrn={record.nrn} product={record.product_name}",
+                    note=note,
                 )
             )
         return evidence
 
     # No records: describe the search itself so the verdict still carries evidence.
-    note = lookup.reason if lookup.outcome == LookupOutcome.CHECK_INCOMPLETE else "searched, no matching record"
+    base_note = lookup.reason if lookup.outcome == LookupOutcome.CHECK_INCOMPLETE else "searched, no matching record"
+    full_note = f"nrn={lookup.nrn} {base_note}"
+    if signals_note:
+        full_note = f"{full_note}; {signals_note}"
     evidence.append(
         Evidence(
             source=lookup.source or "registry",
             source_url=lookup.source_url,
             retrieved_at=retrieved_at,
             fields_compared=[_cmp_to_dict(c) for c in match.comparisons],
-            note=f"nrn={lookup.nrn} {note}",
+            note=full_note,
         )
     )
     return evidence

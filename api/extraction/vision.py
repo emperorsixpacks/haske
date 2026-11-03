@@ -15,12 +15,25 @@ import httpx
 
 from ..app.config import Settings
 from .preprocess import preprocess
-from .schemas import ExtractionResult, FieldConfidence
+from .schemas import EXTRACTION_SCHEMA, ExtractionResult, FieldConfidence
 
 _PROMPT = (
-    "Read the product label in this image. Extract the fields described by the JSON schema "
-    "below and return ONLY valid JSON, no commentary. If a field is not legible, set its "
-    "value to null, set its confidence to 0.0, and add a legibility note.\n\nSchema:\n"
+    "Read the product label in this image. Extract every field in the JSON schema below. "
+    "Return ONLY valid JSON, no commentary, no markdown fences.\n\n"
+    "Rules:\n"
+    "1. If a field is not visible or legible, set its value to null and confidence to 0.0, "
+    "and add a short note to legibility_notes.\n"
+    "2. Dates must use YYYY-MM-DD. If only month and year are shown (e.g. '08/2027'), "
+    "use the last day of that month: '2027-08-31'.\n"
+    "3. For nrn, copy the NAFDAC number exactly as printed. Do not infer or reconstruct it. "
+    "Common patterns: 'A4-100160', 'B2-0451'.\n"
+    "4. For batch, copy the batch/lot code exactly as printed.\n"
+    "5. For shelf_life_months, extract the stated shelf life in months if printed "
+    "(e.g. '24 months' -> 24). Set to null if not printed.\n"
+    "6. For layout_flags, inspect the label and list every anomaly you observe using "
+    "the token prefixes in the schema. An empty list means no anomalies observed.\n\n"
+    "Schema:\n"
+    + EXTRACTION_SCHEMA
 )
 
 
@@ -109,6 +122,18 @@ def _validated(parsed: dict) -> ExtractionResult:
     if not isinstance(parsed, dict):
         raise ValueError("expected JSON object")
     confidence = parsed.get("confidence") or {}
+    # Sanitise layout_flags: keep only strings that start with a known prefix.
+    raw_flags = parsed.get("layout_flags") or []
+    from .schemas import LAYOUT_FLAG_PREFIXES
+    layout_flags = [
+        f for f in raw_flags
+        if isinstance(f, str) and any(f.startswith(p) for p in LAYOUT_FLAG_PREFIXES)
+    ]
+    # shelf_life_months must be a positive integer or null.
+    slm = parsed.get("shelf_life_months")
+    shelf_life_months: int | None = None
+    if isinstance(slm, (int, float)) and slm > 0:
+        shelf_life_months = int(slm)
     return ExtractionResult(
         product_name=parsed.get("product_name"),
         nrn=parsed.get("nrn"),
@@ -118,8 +143,10 @@ def _validated(parsed: dict) -> ExtractionResult:
         manufacturer=parsed.get("manufacturer"),
         strength=parsed.get("strength"),
         category_guess=parsed.get("category_guess"),
+        shelf_life_months=shelf_life_months,
         confidence=FieldConfidence(**confidence),
         legibility_notes=list(parsed.get("legibility_notes") or []),
+        layout_flags=layout_flags,
     )
 
 

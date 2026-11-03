@@ -1,12 +1,14 @@
-"""Orchestration: extraction -> NRN -> lookup -> match -> verdict -> explanation."""
+"""Orchestration: extraction -> NRN -> lookup -> match -> consistency -> verdict -> explanation."""
 
 from __future__ import annotations
 
 import datetime as dt
 
+from ..extraction.consistency import check_consistency
 from ..extraction.explain import Explainer, get_explainer
 from ..extraction.schemas import ExtractionResult
 from ..extraction.vision import Extractor
+from ..observations.store import ObservationStore
 from ..registries.matcher import match
 from ..registries.models import LookupResult, RegistryCategory
 from ..registries.nrn import normalise_nrn
@@ -45,12 +47,14 @@ class CheckService:
         extractor: Extractor,
         router: RegistryRouter,
         explainer: Explainer | None = None,
+        obs_store: ObservationStore | None = None,
     ):
         self.settings = settings
         self.store = store
         self.extractor = extractor
         self.router = router
         self.explainer = explainer or get_explainer(settings)
+        self.obs_store = obs_store
 
     def check_image(self, image_bytes: bytes, filename: str | None = None) -> CheckResponse:
         extraction = self.extractor.extract(image_bytes, filename)
@@ -84,7 +88,44 @@ class CheckService:
             lookup = self.router.lookup(nrn.canonical, category)
 
         match_result = match(extraction.as_label_dict(), lookup.records)
-        verdict = decide(lookup, match_result, category, retrieved_at)
+
+        # Tier 2: deterministic label consistency checks.
+        consistency = check_consistency(extraction)
+
+        # Tier 3: batch conflict check against the observation ledger.
+        batch_conflict_note: str | None = None
+        if (
+            self.obs_store is not None
+            and nrn.canonical
+            and extraction.batch
+        ):
+            conflict = self.obs_store.conflict_check(
+                nrn.canonical,
+                extraction.batch,
+                extraction.expiry_date,
+            )
+            batch_conflict_note = conflict.to_note()
+            # Record this observation for future conflict detection.
+            # Ignore rate-limit errors silently; they should not affect the verdict.
+            try:
+                self.obs_store.record(
+                    nrn=nrn.canonical,
+                    batch=extraction.batch,
+                    mfg_date=extraction.manufacture_date,
+                    expiry_date=extraction.expiry_date,
+                    manufacturer=extraction.manufacturer,
+                )
+            except Exception:  # noqa: BLE001
+                pass
+
+        verdict = decide(
+            lookup,
+            match_result,
+            category,
+            retrieved_at,
+            consistency_flags=consistency.flags,
+            batch_conflict_note=batch_conflict_note,
+        )
 
         # Ask the LLM to write a plain-language explanation of the already-decided verdict.
         evidence_note = verdict.evidence[0].note if verdict.evidence else None
@@ -94,6 +135,8 @@ class CheckService:
             nrn=nrn.canonical,
             category=category.value,
             evidence_note=evidence_note,
+            consistency_flags=consistency.flags,
+            batch_conflict_note=batch_conflict_note,
         )
         if explanation:
             verdict.explanation = explanation

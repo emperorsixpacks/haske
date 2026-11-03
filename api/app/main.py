@@ -9,6 +9,7 @@ from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import JSONResponse
 
 from ..extraction.mock import get_extractor
+from ..observations.store import ObservationStore
 from ..registries.demo import seed_demo
 from ..registries.fake import FakeNapamsClient
 from ..registries.greenbook import GreenbookClient
@@ -40,7 +41,9 @@ def _build_service():
             napams = live_napams
     router = RegistryRouter(greenbook=GreenbookClient(store), napams=napams)
     extractor = get_extractor(settings)
-    return settings, store, CheckService(settings, store, extractor, router)
+    obs_store = ObservationStore(settings.db_path.parent / "observations.db")
+    service = CheckService(settings, store, extractor, router, obs_store=obs_store)
+    return settings, store, service
 
 
 @asynccontextmanager

@@ -24,7 +24,7 @@ from ..app.config import Settings
 _SYSTEM_PROMPT = (
     "You are a product-safety assistant for Nigeria. "
     "A deterministic code has already decided the verdict for a NAFDAC check. "
-    "Your only job is to write a clear, calm, one-to-two sentence explanation "
+    "Your only job is to write a clear, calm, 2-to-3 sentence explanation "
     "of that verdict in plain English for a non-expert user. "
     "Rules you must follow: "
     "(1) Never write 'fake' or 'counterfeit'; say 'indicators found' or 'the register shows'. "
@@ -33,7 +33,11 @@ _SYSTEM_PROMPT = (
     "(3) Never give dosing, take, or stop advice. "
     "(4) If the product category is drug, vaccine, herbal, or device, end with: "
     "'If you have concerns, ask a pharmacist.' "
-    "(5) Return only the explanation text, no JSON, no headers."
+    "(5) If consistency signals are present, mention them briefly and factually "
+    "(e.g. 'A date inconsistency was found on the label that is worth noting.'). "
+    "(6) If a batch conflict is present, state it plainly and factually "
+    "(e.g. 'The expiry date on this label differs from other scans of the same batch code.'). "
+    "(7) Return only the explanation text, no JSON, no headers, no markdown."
 )
 
 
@@ -46,6 +50,8 @@ class Explainer(ABC):
         nrn: str | None,
         category: str | None,
         evidence_note: str | None,
+        consistency_flags: list[str] | None = None,
+        batch_conflict_note: str | None = None,
     ) -> str | None:
         """Return a plain-language explanation string, or None if unavailable."""
         raise NotImplementedError
@@ -65,6 +71,8 @@ class LLMExplainer(Explainer):
         nrn: str | None,
         category: str | None,
         evidence_note: str | None,
+        consistency_flags: list[str] | None = None,
+        batch_conflict_note: str | None = None,
     ) -> str | None:
         context_parts = [f"Verdict code: {verdict_code}"]
         if product_name:
@@ -75,6 +83,10 @@ class LLMExplainer(Explainer):
             context_parts.append(f"Category: {category}")
         if evidence_note:
             context_parts.append(f"Evidence note: {evidence_note}")
+        if consistency_flags:
+            context_parts.append(f"Consistency signals: {json.dumps(consistency_flags)}")
+        if batch_conflict_note:
+            context_parts.append(f"Batch conflict: {batch_conflict_note}")
 
         user_message = "\n".join(context_parts)
 
@@ -85,7 +97,7 @@ class LLMExplainer(Explainer):
                 {"role": "user", "content": user_message},
             ],
             "temperature": 0.3,
-            "max_tokens": 120,
+            "max_tokens": 600,
         }
         headers = {
             "Authorization": f"Bearer {self.settings.meta_api_key}",
@@ -106,8 +118,17 @@ class LLMExplainer(Explainer):
             return None
 
 
-class MockExplainer(Explainer):
-    """Returns a static explanation. Used in MOCK mode and tests."""
+class TemplateExplainer(Explainer):
+    """Deterministic, templated explanation. No model call, no tokens, always safe.
+
+    Used for every check. The verdict wording is fixed by messages.py, and this
+    template restates it. Keeping the explanation deterministic means the language
+    rules (never "fake"/"counterfeit", never certify as genuine) cannot be violated
+    by a model, and each check costs no extra tokens.
+
+    If consistency signals or a batch conflict are present, a short factual
+    addendum is appended.
+    """
 
     _MESSAGES: dict[str, str] = {
         "CONSISTENT_WITH_REGISTRY": (
@@ -140,11 +161,45 @@ class MockExplainer(Explainer):
         nrn: str | None,
         category: str | None,
         evidence_note: str | None,
+        consistency_flags: list[str] | None = None,
+        batch_conflict_note: str | None = None,
     ) -> str | None:
-        return self._MESSAGES.get(verdict_code)
+        base = self._MESSAGES.get(verdict_code)
+        if not base:
+            return None
+
+        addenda: list[str] = []
+
+        # Surface any label signals the model or consistency checker found.
+        signals = consistency_flags or []
+        layout = [f for f in signals if f.startswith("LAYOUT:")]
+        date_flags = [f for f in signals if f in (
+            "EXPIRY_PAST", "EXPIRY_FAR_FUTURE", "MFG_IN_FUTURE", "SHELF_LIFE_MISMATCH"
+        )]
+        if date_flags:
+            addenda.append("A date inconsistency was found on the label that is worth noting.")
+        if layout:
+            addenda.append(
+                "The label shows a visual signal: "
+                + "; ".join(f.replace("LAYOUT:", "") for f in layout[:3])
+                + "."
+            )
+
+        # Surface batch conflict.
+        if batch_conflict_note:
+            # Extract the key numbers from the note for a concise user message.
+            addenda.append(
+                "The expiry date on this label differs from other scans of the same batch code."
+            )
+
+        result = base
+        if addenda:
+            result = result + " " + " ".join(addenda)
+        return result
 
 
 def get_explainer(settings: Settings) -> Explainer:
-    if settings.mock_mode:
-        return MockExplainer()
-    return LLMExplainer(settings)
+    # Deterministic explanation in every mode: no model call, no tokens, and no risk
+    # of a model overstating a verdict. LLMExplainer remains available for a future
+    # opt-in richer explanation but is not wired into the check path.
+    return TemplateExplainer()
