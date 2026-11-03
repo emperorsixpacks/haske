@@ -1,9 +1,10 @@
-"""Orchestration: extraction -> NRN -> lookup -> match -> verdict."""
+"""Orchestration: extraction -> NRN -> lookup -> match -> verdict -> explanation."""
 
 from __future__ import annotations
 
 import datetime as dt
 
+from ..extraction.explain import Explainer, get_explainer
 from ..extraction.schemas import ExtractionResult
 from ..extraction.vision import Extractor
 from ..registries.matcher import match
@@ -43,11 +44,13 @@ class CheckService:
         store: Store,
         extractor: Extractor,
         router: RegistryRouter,
+        explainer: Explainer | None = None,
     ):
         self.settings = settings
         self.store = store
         self.extractor = extractor
         self.router = router
+        self.explainer = explainer or get_explainer(settings)
 
     def check_image(self, image_bytes: bytes, filename: str | None = None) -> CheckResponse:
         extraction = self.extractor.extract(image_bytes, filename)
@@ -82,6 +85,18 @@ class CheckService:
 
         match_result = match(extraction.as_label_dict(), lookup.records)
         verdict = decide(lookup, match_result, category, retrieved_at)
+
+        # Ask the LLM to write a plain-language explanation of the already-decided verdict.
+        evidence_note = verdict.evidence[0].note if verdict.evidence else None
+        explanation = self.explainer.explain(
+            verdict_code=verdict.code.value,
+            product_name=extraction.product_name,
+            nrn=nrn.canonical,
+            category=category.value,
+            evidence_note=evidence_note,
+        )
+        if explanation:
+            verdict.explanation = explanation
 
         return CheckResponse(
             extraction=extraction,

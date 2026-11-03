@@ -36,6 +36,7 @@ class Verdict(BaseModel):
     code: VerdictCode
     title: str
     message: str
+    explanation: str | None = None  # LLM-generated plain-language expansion (optional)
     footer: str | None = None
     evidence: list[Evidence] = Field(default_factory=list)
     abstained: bool = False
