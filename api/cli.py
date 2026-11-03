@@ -64,6 +64,41 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_smoke(args: argparse.Namespace) -> int:
+    """Verify the Meta API key and vision model with a real call."""
+    import httpx
+
+    settings = get_settings()
+    if not settings.meta_api_key:
+        print("META_API_KEY is not set. Add it to .env to leave MOCK mode.", file=sys.stderr)
+        return 1
+
+    base = settings.meta_api_base_url.rstrip("/")
+    headers = {"Authorization": f"Bearer {settings.meta_api_key}"}
+    with httpx.Client(timeout=60) as client:
+        r = client.get(base + "/models", headers=headers)
+        print(f"GET /models -> {r.status_code}")
+        if r.status_code != 200:
+            print(r.text)
+            return 1
+        ids = [m.get("id") for m in r.json().get("data", [])]
+        print("models available (first 6):", ids[:6])
+
+        payload = {
+            "model": settings.meta_vision_model,
+            "messages": [{"role": "user", "content": "Reply with the single word: ok"}],
+        }
+        r2 = client.post(base + "/chat/completions", headers=headers, json=payload)
+        print(f"POST /chat/completions (model={settings.meta_vision_model}) -> {r2.status_code}")
+        if r2.status_code != 200:
+            print(r2.text)
+            return 1
+        content = r2.json()["choices"][0]["message"]["content"]
+        print("model reply:", content.strip())
+    print("SMOKE OK: key and model are working.")
+    return 0
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     from .registries.models import RegistryCategory
 
@@ -83,6 +118,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="haske", description="Haske registry tools")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("probe", help="fetch 3 Greenbook rows and print raw fields")
+    sub.add_parser("smoke", help="verify the Meta API key and vision model")
     fetch = sub.add_parser("fetch", help="fetch the full Greenbook table into a dated snapshot")
     fetch.add_argument("--force", action="store_true", help="save even if suspiciously small")
     verify = sub.add_parser("verify", help="verify an NRN on the NAPAMS portal (Playwright)")
@@ -96,6 +132,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "probe":
         return cmd_probe(args)
+    if args.command == "smoke":
+        return cmd_smoke(args)
     if args.command == "fetch":
         return cmd_fetch(args)
     if args.command == "verify":
