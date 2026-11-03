@@ -45,6 +45,7 @@ export type VerdictCode =
   | "NOT_FOUND_IN_REGISTRY"
   | "EXPIRED_OR_INACTIVE"
   | "ALERT_MATCH"
+  | "KNOWN_TARGET"
   | "CANNOT_CONFIRM";
 
 export interface Verdict {
@@ -66,11 +67,25 @@ export interface NrnInfo {
   valid: boolean;
 }
 
+export interface AlertReference {
+  kind: "ALERT_MATCH" | "KNOWN_TARGET";
+  alert_no: string;
+  date: string | null;
+  product: string;
+  nrn: string | null;
+  source_url: string | null;
+  known_differences: string[];
+  quoted_text: string | null;
+  matched_batch: string | null;
+  fuzzy: boolean;
+}
+
 export interface CheckResponse {
   extraction: Extraction;
   nrn: NrnInfo;
   match_outcome: string;
   verdict: Verdict;
+  alert: AlertReference | null;
 }
 
 export interface RegistryStatus {

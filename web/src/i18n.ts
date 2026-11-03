@@ -52,9 +52,15 @@ export interface Strings {
   resultNotFound: string;
   resultExpired: string;
   resultAlert: string;
+  resultKnownTarget: string;
   resultUnreadable: string;
   resultOutage: string;
   outageBody: string;
+  alertCardTitle: string;
+  alertOpen: string;
+  alertDifferences: string;
+  alertQuoteLabel: string;
+  alertFuzzy: string;
   product: string;
   regNumber: string;
   manufacturer: string;
@@ -207,9 +213,15 @@ const EN: Strings = {
   resultNotFound: "No matching record found",
   resultExpired: "Registration expired or inactive",
   resultAlert: "Matches an official alert",
+  resultKnownTarget: "Known target of an alert",
   resultUnreadable: "We couldn't read the label",
   resultOutage: "The registry didn't respond",
   outageBody: "This does not mean the product is fake. Try again.",
+  alertCardTitle: "NAFDAC Public Alert",
+  alertOpen: "Open the alert",
+  alertDifferences: "What NAFDAC says to look for",
+  alertQuoteLabel: "From NAFDAC",
+  alertFuzzy: "The batch match was close, so please confirm the batch code carefully.",
   product: "Product",
   regNumber: "Reg. no.",
   manufacturer: "Manufacturer",
@@ -356,9 +368,15 @@ const PCM: Strings = {
   resultNotFound: "We no see matching record",
   resultExpired: "Registration don expire",
   resultAlert: "E match official alert",
+  resultKnownTarget: "Dem know this product before",
   resultUnreadable: "We no fit read the label",
   resultOutage: "The registry no gree answer",
   outageBody: "This one no mean say the product be fake. Try again.",
+  alertCardTitle: "NAFDAC Public Alert",
+  alertOpen: "Open the alert",
+  alertDifferences: "Wetin NAFDAC talk say make we look for",
+  alertQuoteLabel: "From NAFDAC",
+  alertFuzzy: "The batch match near, so check the batch code well.",
   product: "Product",
   regNumber: "Reg. no.",
   manufacturer: "Manufacturer",

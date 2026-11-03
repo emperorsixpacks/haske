@@ -181,6 +181,40 @@ export function ResultScreen(props: Props) {
         </div>
       </div>
 
+      {/* Alert card (Evidence-First) */}
+      {result.alert && (
+        <div className="card" style={{ borderColor: "var(--notfound-bg)", background: "#FFF5F5" }}>
+          <div className="card-head">
+            <h2 className="card-title">{s.alertCardTitle} {result.alert.alert_no}</h2>
+            {result.alert.date && <span className="step-note">{result.alert.date}</span>}
+          </div>
+          <p className="help" style={{ fontWeight: 600 }}>{result.alert.product}</p>
+          {result.alert.quoted_text && (
+            <div className="notice notice-slate" style={{ marginTop: 8 }}>
+              <span>
+                <strong>{s.alertQuoteLabel}: </strong>{result.alert.quoted_text}
+              </span>
+            </div>
+          )}
+          {result.alert.known_differences.length > 0 && (
+            <>
+              <p className="kicker" style={{ marginTop: 12 }}>{s.alertDifferences}</p>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {result.alert.known_differences.map((d, i) => (
+                  <li key={i} className="help">{d}</li>
+                ))}
+              </ul>
+            </>
+          )}
+          {result.alert.fuzzy && <p className="notice notice-warn" style={{ marginTop: 8 }}>{s.alertFuzzy}</p>}
+          {result.alert.source_url && (
+            <a className="btn-ghost" style={{ fontSize: 15, padding: "8px 0" }} href={result.alert.source_url} target="_blank" rel="noreferrer">
+              {s.alertOpen}
+            </a>
+          )}
+        </div>
+      )}
+
       {/* Product card */}
       <div className="card">
         <h2 className="kicker">{s.product}</h2>

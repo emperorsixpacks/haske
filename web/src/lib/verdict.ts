@@ -11,6 +11,7 @@ export interface VerdictPresentation {
     | "resultNotFound"
     | "resultExpired"
     | "resultAlert"
+    | "resultKnownTarget"
     | "resultUnreadable"
     | "resultOutage";
   isOutage: boolean;
@@ -38,6 +39,8 @@ export function verdictPresentation(result: CheckResponse): VerdictPresentation 
       return { tone: "differ", icon: "alert", wordsKey: "resultExpired", isOutage: false };
     case "ALERT_MATCH":
       return { tone: "notfound", icon: "alert", wordsKey: "resultAlert", isOutage: false };
+    case "KNOWN_TARGET":
+      return { tone: "differ", icon: "alert", wordsKey: "resultKnownTarget", isOutage: false };
     case "CANNOT_CONFIRM":
       if (isRegistryOutage(code, message)) {
         return { tone: "unreadable", icon: "question", wordsKey: "resultOutage", isOutage: true };
@@ -73,6 +76,7 @@ export function buildReasons(result: CheckResponse): string[] {
       reasons.push("reasonExpired");
       break;
     case "ALERT_MATCH":
+    case "KNOWN_TARGET":
       reasons.push("reasonMismatch");
       break;
     case "CANNOT_CONFIRM":
