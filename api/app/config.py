@@ -44,6 +44,25 @@ class Settings(BaseSettings):
     request_timeout_seconds: float = 30.0
     snapshot_min_ratio: float = 0.8
 
+    # Investigator agent (escalation layer). Disabled by default: the deterministic
+    # pipeline is the fast path, the agent loop only fires on a trigger.
+    investigator_enabled: bool = False
+    investigator_round_limit: int = 8
+    investigator_time_budget_seconds: float = 45.0
+
+    # NAFDAC MAS short codes (verify against the nafdac.gov.ng MAS page before shipping).
+    mas_short_codes: dict[str, str] = {
+        "pharmasecure": "38351",
+        "sproxil": "38353",
+        "savante": "38120",
+        "ubq_kezzler": "20966",
+        "mpedigree": "1393",
+    }
+
+    # NAFDAC reporting contact (verified from a public alert page on nafdac.gov.ng).
+    report_phone: str = "0800-162-3322"
+    report_email: str = "sf.alert@nafdac.gov.ng"
+
     @property
     def snapshots_dir(self) -> Path:
         return self.data_dir / "snapshots"
