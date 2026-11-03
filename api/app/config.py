@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     investigator_enabled: bool = False
     investigator_round_limit: int = 8
     investigator_time_budget_seconds: float = 45.0
+    investigator_token_cap: int = 6000  # per-check cap on driver completion tokens
 
     # NAFDAC MAS short codes (verify against the nafdac.gov.ng MAS page before shipping).
     mas_short_codes: dict[str, str] = {

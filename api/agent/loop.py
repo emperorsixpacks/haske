@@ -168,6 +168,8 @@ def run_agent(
     ]
 
     start = time.monotonic()
+    total_tokens = 0
+    token_cap = getattr(settings, "investigator_token_cap", 0) or 0
     final_report: dict | None = None
     pending_question: dict | None = None
     retry_used = False
@@ -183,6 +185,9 @@ def run_agent(
             return AgentOutcome(outcome="error", trace=trace, rounds=round_no - 1, message=f"model_call_failed: {type(exc).__name__}")
 
         tokens = _completion_tokens(response)
+        total_tokens += tokens
+        if token_cap and total_tokens > token_cap:
+            return AgentOutcome(outcome="budget_exceeded", trace=trace, rounds=round_no, message="token cap reached")
         choice = (response.get("choices") or [{}])[0]
         message = choice.get("message") or {}
         tool_calls = message.get("tool_calls") or []

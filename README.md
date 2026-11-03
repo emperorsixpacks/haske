@@ -32,6 +32,28 @@ model-backed steps, and it never chooses a verdict:
 
 Every verdict is decided by deterministic code, never by a model.
 
+### Where Meta's models do the work
+
+The investigator agent (`api/agent/`) is an optional escalation layer (disabled by default;
+set `INVESTIGATOR_ENABLED=1`). The deterministic pipeline stays the fast path, and the agent
+only fires on a trigger such as an alert candidate or a label signal. It uses these Meta Model
+API capabilities, all against the same OpenAI-compatible endpoint:
+
+| Capability | Where it is used |
+|------------|------------------|
+| Function / tool calling | `api/agent/loop.py` runs the model with `tools` and executes its `tool_calls` |
+| Parallel tool calls | multiple tool calls in one round run concurrently (`ThreadPoolExecutor`) |
+| Multimodal reads | `read_label`, `reread_region`, and `visual_check` send the label image |
+| Two-pass reading | pass 1 reads the whole pack with boxes, pass 2 re-reads cropped NRN/batch/dates |
+| Long context | the compact NAFDAC alert corpus is sent in the system prompt; prompt caching makes it cheap across rounds |
+| Reasoning effort | low by default, raised to high when two reads disagree or an alert candidate appears |
+| Structured output | every tool result is JSON with a schema; the finish report is validated and sanitized by code |
+| Bounding boxes | the vision model returns normalized boxes, used to crop regions for re-reads and evidence |
+
+Tool results are the only source of NRNs, URLs, alert text, and registry data. The model drafts
+the explanation and next steps; code decides every verdict code and strips any fact the tools
+did not return.
+
 ## Quick start
 
 ```bash
