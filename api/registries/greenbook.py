@@ -27,8 +27,10 @@ from .store import Store
 _CONTACT_KEY_RE = re.compile(r"(email|phone|tel|mobile|fax|address|contact)", re.IGNORECASE)
 
 # Verified exact row keys (Laravel flattens the eager-loaded relationships into both nested
-# objects and *_name / *_id fields). The NAFDAC number is the "NAFDAC" key. Manufacturer is
-# only available as manufacturer_id in this feed, not a name.
+# objects and *_name / *_id fields). The NAFDAC number is the "NAFDAC" key.
+# NOTE: the DataTables feed exposes manufacturer_id but NOT a manufacturer name.
+# fetch_manufacturer_names() attempts to resolve id -> name via /manufacturers; it is a
+# stub until the endpoint is confirmed live (see NOTES.md).
 _FIELD_KEYS: dict[str, list[str]] = {
     "nrn": ["NAFDAC", "nrn"],
     "product_name": ["product_name"],
@@ -36,6 +38,7 @@ _FIELD_KEYS: dict[str, list[str]] = {
     "status": ["status"],
     "applicant": ["applicant_name"],
     "manufacturer": ["manufacturer_name"],
+    "manufacturer_id": ["manufacturer_id"],
     "active_ingredients": ["ingredient_name", "composition"],
     "strength": ["strength"],
     "form": ["form_name"],
@@ -158,8 +161,13 @@ class GreenbookSnapshotter:
                     return _to_text(value)
         return None
 
-    def normalise(self, row: dict) -> RegistryRecord | None:
-        """Normalise a raw row into a RegistryRecord, stripping contact fields."""
+    def normalise(self, row: dict, manufacturer_names: dict[str, str] | None = None) -> RegistryRecord | None:
+        """Normalise a raw row into a RegistryRecord, stripping contact fields.
+
+        manufacturer_names: optional id->name map from fetch_manufacturer_names(). When
+        provided, manufacturer_id is resolved to a name. Without it, manufacturer stays None
+        because the DataTables feed only exposes manufacturer_id, not the name.
+        """
         raw = {k: v for k, v in row.items() if k != "__row__" and not _CONTACT_KEY_RE.search(str(k))}
         nrn = self._column_value(row, "nrn")
         product_name = self._column_value(row, "product_name")
@@ -170,13 +178,22 @@ class GreenbookSnapshotter:
         ingredients = self._column_value(row, "active_ingredients")
         category_raw = (self._column_value(row, "category") or "").lower()
         category = _guess_category(category_raw)
+
+        # Resolve manufacturer name: prefer manufacturer_name field if present in the row,
+        # then fall back to looking up manufacturer_id in the enrichment map.
+        manufacturer = self._column_value(row, "manufacturer")
+        if not manufacturer and manufacturer_names:
+            mfr_id = self._column_value(row, "manufacturer_id")
+            if mfr_id:
+                manufacturer = manufacturer_names.get(mfr_id)
+
         return RegistryRecord(
             nrn=nrn,
             product_name=product_name,
             category=category,
             status=self._column_value(row, "status"),
             applicant=self._column_value(row, "applicant"),
-            manufacturer=self._column_value(row, "manufacturer"),
+            manufacturer=manufacturer,
             active_ingredients=_split_ingredients(ingredients),
             strength=self._column_value(row, "strength"),
             form=self._column_value(row, "form"),
@@ -186,6 +203,45 @@ class GreenbookSnapshotter:
             source_url=self.settings.greenbook_base_url,
             raw=raw,
         )
+
+    def fetch_manufacturer_names(self, client: httpx.Client) -> dict[str, str]:
+        """Attempt to fetch an id->name map from /manufacturers.
+
+        The endpoint is NOT yet confirmed live (milestone 1). This method tries a GET and
+        returns an empty dict on any failure rather than raising, so fetch() always succeeds.
+        The expected shape (if the endpoint exists) is a JSON array of objects with at least
+        "id" and "name" keys, e.g.: [{"id": "42", "name": "Acme Pharma Ltd"}, ...]
+        """
+        import logging
+
+        url = self.settings.greenbook_base_url.rstrip("/") + "/manufacturers"
+        try:
+            resp = client.get(url, timeout=10)
+            if resp.status_code != 200:
+                logging.getLogger("haske").debug(
+                    "manufacturer enrichment: /manufacturers returned %s, skipping",
+                    resp.status_code,
+                )
+                return {}
+            data = resp.json()
+            if not isinstance(data, list):
+                return {}
+            result: dict[str, str] = {}
+            for item in data:
+                if isinstance(item, dict):
+                    mfr_id = str(item.get("id") or "").strip()
+                    name = str(item.get("name") or "").strip()
+                    if mfr_id and name:
+                        result[mfr_id] = name
+            logging.getLogger("haske").info(
+                "manufacturer enrichment: loaded %d names", len(result)
+            )
+            return result
+        except Exception:  # noqa: BLE001
+            logging.getLogger("haske").debug(
+                "manufacturer enrichment: /manufacturers unavailable, skipping"
+            )
+            return {}
 
     def probe(self) -> dict:
         """Fetch 3 rows and return diagnostic info; raise if the shape is unexpected."""
@@ -213,6 +269,7 @@ class GreenbookSnapshotter:
 
         fetched_at = dt.datetime.now(dt.timezone.utc)
         all_rows: list[dict] = []
+        manufacturer_names: dict[str, str] = {}
         with self._http() as client:
             first = self._request_page(client, start=0, length=1, draw=1)
             total = int(first.get("recordsTotal") or first.get("recordsFiltered") or 0)
@@ -230,6 +287,8 @@ class GreenbookSnapshotter:
                 draw += 1
                 if start < total:
                     time.sleep(self.settings.request_delay_seconds)
+            # Attempt to enrich manufacturer names (graceful no-op if endpoint absent).
+            manufacturer_names = self.fetch_manufacturer_names(client)
 
         if not all_rows:
             raise GreenbookError("no rows fetched")
@@ -243,7 +302,7 @@ class GreenbookSnapshotter:
                     f"({prev['record_count']}); use --force to save anyway"
                 )
 
-        records = [r for r in (self.normalise(row) for row in all_rows) if r is not None]
+        records = [r for r in (self.normalise(row, manufacturer_names) for row in all_rows) if r is not None]
         raw_bytes = json.dumps(all_rows, default=str, ensure_ascii=False).encode("utf-8")
         content_hash = hashlib.sha256(raw_bytes).hexdigest()
 
