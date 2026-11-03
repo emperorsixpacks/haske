@@ -5,7 +5,9 @@ from fastapi.testclient import TestClient
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("HASKE_DATA_DIR", str(tmp_path))
-    monkeypatch.delenv("META_API_KEY", raising=False)
+    # Force MOCK mode even when a real key is present in .env. An empty env var
+    # takes precedence over the dotenv file in pydantic-settings.
+    monkeypatch.setenv("META_API_KEY", "")
     from api.app.main import app
 
     with TestClient(app) as c:

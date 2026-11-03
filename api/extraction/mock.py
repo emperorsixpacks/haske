@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..app.config import Settings
 from .schemas import ExtractionResult
-from .vision import Extractor
+from .vision import Extractor, VisionExtractor
 
 _FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 
