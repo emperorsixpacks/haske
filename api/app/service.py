@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import datetime as dt
 
 from ..extraction.consistency import check_consistency
@@ -181,6 +182,46 @@ class CheckService:
             verdict=verdict,
             alert=alert_ref,
         )
+
+    def investigate(self, image_bytes: bytes, filename: str | None = None) -> dict:
+        """Run the investigator agent as an escalation layer over the deterministic check.
+
+        The deterministic pipeline always runs first and is returned as the fallback. The
+        agent loop may produce a richer report and a trace; on budget/timeout/error the
+        caller uses the fallback.
+        """
+        from ..agent.loop import run_agent
+        from ..agent.tools import AgentContext
+
+        extraction = self.extractor.extract(image_bytes, filename)
+        baseline = self._evaluate(extraction)
+
+        category = category_from_guess(extraction.category_guess)
+        consistency = check_consistency(extraction)
+        b64 = base64.b64encode(image_bytes).decode("ascii")
+        ctx = AgentContext(
+            settings=self.settings,
+            extractor=self.extractor,
+            router=self.router,
+            alert_registry=get_alert_registry(),
+            images=[{"id": "main", "data_url": f"data:image/jpeg;base64,{b64}"}],
+            extraction=extraction,
+            nrn=baseline.nrn,
+            category=category,
+            consistency_flags=consistency.flags,
+        )
+        outcome = run_agent(settings=self.settings, ctx=ctx)
+
+        return {
+            "outcome": outcome.outcome,
+            "report": outcome.report,
+            "question": outcome.question,
+            "trace": outcome.trace.to_list(),
+            "trace_summary": outcome.trace.summary_line(),
+            "rounds": outcome.rounds,
+            "fallback_verdict": baseline.verdict.code.value,
+            "fallback_alert": baseline.alert.model_dump() if baseline.alert else None,
+        }
 
     def _snapshot_time(self) -> dt.datetime | None:
         snap = self.store.latest_snapshot()

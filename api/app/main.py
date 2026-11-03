@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
 from ..extraction.mock import get_extractor
@@ -17,7 +17,7 @@ from ..registries.napams import NapamsClient, NapamsCacheClient, load_napams_cac
 from ..registries.router import RegistryRouter
 from ..registries.store import Store
 from .config import get_settings
-from .schemas import CheckFieldsRequest, CheckResponse, RegistryStatus
+from .schemas import CheckFieldsRequest, CheckResponse, InvestigateResponse, RegistryStatus
 from .service import CheckService
 
 logger = logging.getLogger("haske")
@@ -89,3 +89,14 @@ async def check_fields(fields: CheckFieldsRequest) -> CheckResponse:
     _metrics["field_checks"] += 1
     service: CheckService = app.state.service
     return service.check_fields(fields.model_dump())
+
+
+@app.post("/v1/investigate", response_model=InvestigateResponse)
+async def investigate(image: UploadFile = File(...)) -> InvestigateResponse:
+    settings = app.state.settings
+    if not settings.investigator_enabled:
+        raise HTTPException(status_code=409, detail="investigator_disabled")
+    _metrics["checks"] += 1
+    service: CheckService = app.state.service
+    data = await image.read()
+    return service.investigate(data, filename=image.filename)

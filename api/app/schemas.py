@@ -49,6 +49,27 @@ class CheckResponse(BaseModel):
     alert: AlertReference | None = None
 
 
+class TraceEventModel(BaseModel):
+    round: int
+    tool: str
+    effort: str
+    latency_ms: int
+    tokens: int
+    status: str
+    summary: str
+
+
+class InvestigateResponse(BaseModel):
+    outcome: str
+    report: dict | None = None
+    question: dict | None = None
+    trace: list[TraceEventModel] = []
+    trace_summary: str
+    rounds: int
+    fallback_verdict: str | None = None
+    fallback_alert: AlertReference | None = None
+
+
 class RegistryStatus(BaseModel):
     source: str
     snapshot_date: str | None
