@@ -194,3 +194,34 @@ def test_visual_check_tool_returns_yes_no():
     )
     assert result["answer"] == "yes"
     assert result["confidence"] == 0.9
+
+
+# --- Item 5 hardening: graceful termination + language guard -----------------
+
+def test_agent_loop_accepts_plain_text_summary():
+    # The model answers directly instead of calling finish; the loop accepts the text.
+    extraction = ExtractionResult(nrn="04-6985")
+    responses = [
+        _resp([_tool_call("c1", "read_label", {"images": ["img1"]})]),
+        {
+            "choices": [{"finish_reason": "stop", "index": 0, "message": {
+                "role": "assistant", "content": "This label matches the registry.", "tool_calls": None,
+            }, "logprobs": None}],
+            "usage": {"completion_tokens": 50, "total_tokens": 100},
+        },
+    ]
+    outcome = run_agent(settings=_settings(), ctx=_ctx(extraction), transport=_transport(responses))
+    assert outcome.outcome == "finished"
+    assert outcome.report["summary"] == "This label matches the registry."
+
+
+def test_validator_strips_banned_words():
+    from api.agent.tools import AllowedFacts
+
+    allowed = AllowedFacts()
+    report = {"summary": "This is a genuine certified product, not counterfeit"}
+    cleaned, violations = validate_report(report, allowed)
+    assert "genuine" not in cleaned["summary"]
+    assert "counterfeit" not in cleaned["summary"]
+    assert "certified" not in cleaned["summary"]
+    assert any("word:" in v for v in violations)

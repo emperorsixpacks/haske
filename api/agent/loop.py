@@ -172,7 +172,6 @@ def run_agent(
     token_cap = getattr(settings, "investigator_token_cap", 0) or 0
     final_report: dict | None = None
     pending_question: dict | None = None
-    retry_used = False
 
     for round_no in range(1, round_limit + 1):
         if time.monotonic() - start > time_budget_seconds:
@@ -219,15 +218,21 @@ def run_agent(
                     messages.append({"role": "tool", "tool_call_id": cid, "content": json.dumps(result)})
                     return AgentOutcome(outcome="needs_user", question=pending_question, trace=trace, rounds=round_no)
                 messages.append({"role": "tool", "tool_call_id": cid, "content": json.dumps(result, default=str)})
+
+            # Nudge toward finishing once the key facts are gathered.
+            if round_no >= 3:
+                messages.append({"role": "user", "content": "You have the facts you need. Call finish now with your report."})
             continue
 
-        # No tool calls: the model answered directly instead of calling finish.
+        # No tool calls: the model answered directly. Accept its text as the summary so the
+        # loop terminates cleanly instead of spinning.
         content = message.get("content")
-        if content and finish_reason == "stop" and not retry_used:
-            retry_used = True
-            messages.append(message)
-            messages.append({"role": "user", "content": "Call the finish tool with your report instead of answering directly."})
-            continue
+        if content and finish_reason == "stop":
+            report, _violations = validate_report(
+                {"summary": content, "next_steps": [], "proposed_verdict": None, "facts": {}},
+                ctx.allowed,
+            )
+            return AgentOutcome(outcome="finished", report=report, trace=trace, rounds=round_no)
 
         return AgentOutcome(outcome="error", trace=trace, rounds=round_no, message="model did not call finish")
 

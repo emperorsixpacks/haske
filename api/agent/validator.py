@@ -14,6 +14,11 @@ _URL_RE = re.compile(r"https?://[^\s\"'<>]+")
 _ALERT_NO_RE = re.compile(r"\b\d{3}/\d{4}\b")
 # NRN-like: letter(s) + digits + dash + digits, e.g. A4-0123 or 02-3457.
 _NRN_RE = re.compile(r"\b[A-Z]{0,3}\d{1,2}-\d{3,6}\b")
+# Words the model must never put in a finish report: neither accuse nor certify.
+_BANNED_WORDS_RE = re.compile(
+    r"\b(fake|counterfeit|counterfeited|counterfeiting|genuine|authentic|certified|guaranteed)\b",
+    re.IGNORECASE,
+)
 
 
 def _redact_text(text: str, allowed: AllowedFacts) -> tuple[str, list[str]]:
@@ -43,6 +48,14 @@ def _redact_text(text: str, allowed: AllowedFacts) -> tuple[str, list[str]]:
         return m.group(0)
 
     text = _ALERT_NO_RE.sub(alert_repl, text)
+
+    # Language guard: the report must neither accuse (fake/counterfeit) nor certify
+    # (genuine/authentic/certified). Strip these and record them as violations.
+    def word_repl(m):
+        violations.append(f"word:{m.group(0).lower()}")
+        return "[removed]"
+
+    text = _BANNED_WORDS_RE.sub(word_repl, text)
 
     return text, violations
 

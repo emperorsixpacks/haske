@@ -81,12 +81,16 @@ class CheckService:
         extraction = self.extractor.extract(image_bytes, filename)
         response = self._evaluate(extraction)
         # Escalation ladder: only run the investigator agent on a trigger, and only when
-        # enabled. The deterministic response is always the fallback.
+        # enabled. The deterministic response is always the fallback, and the agent can
+        # never break it: any failure leaves the deterministic result intact.
         if self.settings.investigator_enabled and self._should_escalate(response, extraction):
-            outcome = self._run_agent(extraction, image_bytes, response)
-            response.agent_trace = [TraceEventModel(**e) for e in outcome.trace.to_list()]
-            response.trace_summary = outcome.trace.summary_line()
-            response.agent_report = outcome.report
+            try:
+                outcome = self._run_agent(extraction, image_bytes, response)
+                response.agent_trace = [TraceEventModel(**e) for e in outcome.trace.to_list()]
+                response.trace_summary = outcome.trace.summary_line()
+                response.agent_report = outcome.report
+            except Exception:  # noqa: BLE001 - the deterministic result must always survive
+                pass
         return response
 
     def check_fields(self, fields: dict) -> CheckResponse:
