@@ -80,12 +80,25 @@ export interface AlertReference {
   fuzzy: boolean;
 }
 
+export interface TraceEvent {
+  round: number;
+  tool: string;
+  effort: string;
+  latency_ms: number;
+  tokens: number;
+  status: string;
+  summary: string;
+}
+
 export interface CheckResponse {
   extraction: Extraction;
   nrn: NrnInfo;
   match_outcome: string;
   verdict: Verdict;
   alert: AlertReference | null;
+  agent_trace: TraceEvent[];
+  trace_summary: string | null;
+  agent_report: Record<string, unknown> | null;
 }
 
 export interface RegistryStatus {

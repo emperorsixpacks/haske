@@ -61,6 +61,7 @@ export interface Strings {
   alertDifferences: string;
   alertQuoteLabel: string;
   alertFuzzy: string;
+  traceTitle: string;
   product: string;
   regNumber: string;
   manufacturer: string;
@@ -222,6 +223,7 @@ const EN: Strings = {
   alertDifferences: "What NAFDAC says to look for",
   alertQuoteLabel: "From NAFDAC",
   alertFuzzy: "The batch match was close, so please confirm the batch code carefully.",
+  traceTitle: "How the investigator worked",
   product: "Product",
   regNumber: "Reg. no.",
   manufacturer: "Manufacturer",
@@ -377,6 +379,7 @@ const PCM: Strings = {
   alertDifferences: "Wetin NAFDAC talk say make we look for",
   alertQuoteLabel: "From NAFDAC",
   alertFuzzy: "The batch match near, so check the batch code well.",
+  traceTitle: "How the investigator work",
   product: "Product",
   regNumber: "Reg. no.",
   manufacturer: "Manufacturer",

@@ -6,6 +6,7 @@ import { buildShareText, shareOnWhatsApp, sourceNames } from "../lib/share";
 import { sourceHome, REPORT_URL } from "../lib/links";
 import { isUnusualBatch } from "../lib/batch";
 import { tick } from "../lib/vibrate";
+import { TracePanel } from "../components/TracePanel";
 import {
   Alert,
   Bookmark,
@@ -308,6 +309,9 @@ export function ResultScreen(props: Props) {
           ))}
         </ul>
       </details>
+
+      {/* Investigator trace */}
+      <TracePanel trace={result.agent_trace ?? []} summary={result.trace_summary} s={s} />
 
       {/* Actions */}
       <div className="btn-row">
