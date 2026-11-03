@@ -38,6 +38,7 @@ class AgentContext:
     allowed: AllowedFacts = field(default_factory=AllowedFacts)
     effort_state: dict = field(default_factory=lambda: {"alert_candidate": False, "read_disagreement": False})
     reads: list[dict] = field(default_factory=list)
+    boxes: dict = field(default_factory=dict)
 
 
 def _decode_data_url(data_url: str) -> bytes:
@@ -62,6 +63,7 @@ def _extraction_to_dict(ext) -> dict:
         "category_guess": d.get("category_guess"),
         "confidence": d.get("confidence"),
         "legibility_notes": d.get("legibility_notes"),
+        "boxes": d.get("boxes"),
     }
 
 
@@ -85,6 +87,8 @@ def _read_label(args: dict, ctx: AgentContext) -> dict:
         ctx.allowed.nrns.add(str(result["nrn"]))
     if result.get("batch"):
         ctx.allowed.batches.add(str(result["batch"]))
+    if ext is not None and getattr(ext, "boxes", None):
+        ctx.boxes = dict(getattr(ext, "boxes"))
     ctx.reads.append(result)
     return result
 
@@ -93,14 +97,33 @@ def _reread_region(args: dict, ctx: AgentContext) -> dict:
     field = args.get("field")
     image_id = args.get("image_id")
     image = next((i for i in ctx.images if i["id"] == image_id), None) or (ctx.images[0] if ctx.images else None)
-    if image is not None:
-        ext = ctx.extractor.extract(_decode_data_url(image["data_url"]), filename=image.get("id"))
+
+    if image is not None and ctx.extractor is not None:
+        box = (ctx.boxes or {}).get(field)
+        if box:
+            from ..extraction.crop import crop_to_box
+            cropped = crop_to_box(_decode_data_url(image["data_url"]), box)
+            ext = ctx.extractor.extract(cropped, filename=f"{field}_crop")
+        else:
+            ext = ctx.extractor.extract(_decode_data_url(image["data_url"]), filename=image.get("id"))
     else:
         ext = ctx.extraction
+
     d = _extraction_to_dict(ext)
     value = d.get(field)
-    if value:
-        ctx.allowed.nrns.add(str(value)) if field == "nrn" else None
+    if value and field == "nrn":
+        ctx.allowed.nrns.add(str(value))
+    if value and field == "batch":
+        ctx.allowed.batches.add(str(value))
+
+    # Detect disagreement with an earlier read of the same field.
+    prior = next((r.get(field) for r in ctx.reads if r.get(field)), None)
+    if prior is not None and value is not None:
+        from ..extraction.two_pass import field_agreement
+        agreement, _ = field_agreement(prior, value)
+        if agreement < 0.6:
+            ctx.effort_state["read_disagreement"] = True
+
     ctx.reads.append({"field": field, "value": value, "reread": True})
     return {"field": field, "value": value, "confidence": d.get("confidence", {}).get(field)}
 

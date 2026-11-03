@@ -31,7 +31,9 @@ _PROMPT = (
     "5. For shelf_life_months, extract the stated shelf life in months if printed "
     "(e.g. '24 months' -> 24). Set to null if not printed.\n"
     "6. For layout_flags, inspect the label and list every anomaly you observe using "
-    "the token prefixes in the schema. An empty list means no anomalies observed.\n\n"
+    "the token prefixes in the schema. An empty list means no anomalies observed.\n"
+    "7. For boxes, return normalized bounding boxes with coordinates between 0 and 1 for "
+    "each field you located. Omit a field's box if you cannot localize it.\n\n"
     "Schema:\n"
     + EXTRACTION_SCHEMA
 )
@@ -147,7 +149,25 @@ def _validated(parsed: dict) -> ExtractionResult:
         confidence=FieldConfidence(**confidence),
         legibility_notes=list(parsed.get("legibility_notes") or []),
         layout_flags=layout_flags,
+        boxes=_clean_boxes(parsed.get("boxes")),
     )
+
+
+def _clean_boxes(raw: dict | None) -> dict[str, list[float]]:
+    """Keep only well-formed normalized boxes: four numbers in [0, 1]."""
+    if not isinstance(raw, dict):
+        return {}
+    boxes: dict[str, list[float]] = {}
+    for key, value in raw.items():
+        if not isinstance(value, (list, tuple)) or len(value) != 4:
+            continue
+        try:
+            coords = [float(v) for v in value]
+        except (TypeError, ValueError):
+            continue
+        if all(0.0 <= c <= 1.0 for c in coords) and coords[2] > coords[0] and coords[3] > coords[1]:
+            boxes[str(key)] = coords
+    return boxes
 
 
 def _unreadable(reason: str) -> ExtractionResult:

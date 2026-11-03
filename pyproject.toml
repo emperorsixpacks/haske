@@ -12,6 +12,7 @@ dependencies = [
     "pydantic-settings>=2.6",
     "python-multipart>=0.0.12",
     "playwright>=1.48",
+    "pillow>=10.4",
 ]
 
 [dependency-groups]

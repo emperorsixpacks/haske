@@ -46,6 +46,9 @@ class ExtractionResult(BaseModel):
     legibility_notes: list[str] = Field(default_factory=list)
     # Layout anomaly flags reported by the vision model (see LAYOUT_FLAG_PREFIXES).
     layout_flags: list[str] = Field(default_factory=list)
+    # Normalized bounding boxes (0..1) for each localized field, e.g.
+    # {"nrn": [x0, y0, x1, y1], "batch": [...]}. Empty when the model cannot localize.
+    boxes: dict[str, list[float]] = Field(default_factory=dict)
 
     def as_label_dict(self) -> dict:
         return {
@@ -83,6 +86,13 @@ EXTRACTION_SCHEMA = """
     "MISSING_SECURITY_ELEMENT:<element>",
     "LOGO_QUALITY_LOW",
     "TEXT_ALIGNMENT_OFF:<location>"
-  ]
+  ],
+  "boxes": {
+    "product_name": [x0, y0, x1, y1],
+    "nrn": [x0, y0, x1, y1],
+    "batch": [x0, y0, x1, y1],
+    "manufacture_date": [x0, y0, x1, y1],
+    "expiry_date": [x0, y0, x1, y1]
+  }
 }
 """
