@@ -7,11 +7,11 @@ import json
 import httpx
 
 from api.agent.loop import AgentOutcome, run_agent
-from api.agent.tools import AgentContext
+from api.agent.tools import TOOL_BY_NAME, AgentContext
 from api.agent.validator import validate_report
 from api.app.config import Settings
 from api.extraction.schemas import ExtractionResult
-from api.registries.alerts import get_alert_registry
+from api.registries.alerts import alert_corpus_text, get_alert_registry
 from api.registries.models import LookupResult
 
 
@@ -158,3 +158,39 @@ def test_agent_loop_ask_user_pauses():
     outcome = run_agent(settings=_settings(), ctx=_ctx(extraction), transport=_transport(responses))
     assert outcome.outcome == "needs_user"
     assert outcome.question["kind"] == "photo"
+
+
+# --- Item 3: alerts in long context + targeted checks -------------------------
+
+def test_alert_corpus_text_includes_alerts():
+    corpus = alert_corpus_text(get_alert_registry())
+    assert "027/2025" in corpus
+    assert "Postinor 2" in corpus
+    assert "04-6985" in corpus
+
+
+def test_verify_alert_discards_unverified_proposal():
+    reg = get_alert_registry()
+    # Propose the Postinor alert for the wrong batch -> not a counterfeit match.
+    assert reg.verify_alert("nafdac-027-2025-postinor2", "04-6985", "T32458H") is None
+
+
+def test_verify_alert_confirms_matching_proposal():
+    reg = get_alert_registry()
+    finding = reg.verify_alert("nafdac-027-2025-postinor2", "04-6985", "T36184B")
+    assert finding is not None
+    assert finding.kind == "ALERT_MATCH"
+
+
+def test_visual_check_tool_returns_yes_no():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"choices": [{"message": {"content": '{"answer":"yes","confidence":0.9,"note":"misspelled Veify found"}'}}]})
+
+    ctx = _ctx()
+    ctx.images = [{"id": "main", "data_url": "data:image/jpeg;base64,aGVsbG8="}]
+    ctx.transport = httpx.MockTransport(handler)
+    result = TOOL_BY_NAME["visual_check"].handler(
+        {"question": "Does the label spell Veify instead of Verify?", "image_id": "main"}, ctx
+    )
+    assert result["answer"] == "yes"
+    assert result["confidence"] == 0.9

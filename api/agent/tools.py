@@ -39,6 +39,7 @@ class AgentContext:
     effort_state: dict = field(default_factory=lambda: {"alert_candidate": False, "read_disagreement": False})
     reads: list[dict] = field(default_factory=list)
     boxes: dict = field(default_factory=dict)
+    transport: Any = None
 
 
 def _decode_data_url(data_url: str) -> bytes:
@@ -155,7 +156,14 @@ def _alert_search(args: dict, ctx: AgentContext) -> dict:
     nrn = args.get("nrn")
     batch = args.get("batch")
     product = args.get("product")
-    finding = ctx.alert_registry.lookup(nrn, batch)
+    alert_id = args.get("alert_id")
+
+    # A proposed alert id is verified by code; unverified proposals are discarded.
+    if alert_id:
+        finding = ctx.alert_registry.verify_alert(alert_id, nrn, batch)
+    else:
+        finding = ctx.alert_registry.lookup(nrn, batch)
+
     candidates = []
     if finding is not None:
         a = finding.alert
@@ -176,7 +184,30 @@ def _alert_search(args: dict, ctx: AgentContext) -> dict:
             "matched_batch": finding.matched.batch if finding.matched else None,
         })
         ctx.effort_state["alert_candidate"] = True
-    return {"matched": finding is not None, "candidates": candidates, "product_hint": product}
+    return {
+        "matched": finding is not None,
+        "verified_proposal": finding is not None if alert_id else None,
+        "candidates": candidates,
+        "product_hint": product,
+    }
+
+
+def _visual_check(args: dict, ctx: AgentContext) -> dict:
+    question = args.get("question")
+    image_id = args.get("image_id")
+    box = args.get("box")
+    image = next((i for i in ctx.images if i["id"] == image_id), None) or (ctx.images[0] if ctx.images else None)
+    if image is None:
+        return {"error": "no_image"}
+    data = _decode_data_url(image["data_url"])
+    if box and isinstance(box, list) and len(box) == 4:
+        from ..extraction.crop import crop_to_box
+        data = crop_to_box(data, box)
+    from ..extraction.visual_check import ask_visual_question
+    result = ask_visual_question(ctx.settings, data, question, transport=ctx.transport)
+    if result is None:
+        return {"error": "visual_check_failed"}
+    return result
 
 
 def _compare_to_alert(args: dict, ctx: AgentContext) -> dict:
@@ -272,13 +303,24 @@ TOOLS: list[Tool] = [
     ),
     Tool(
         name="alert_search",
-        description="Search the NAFDAC public-alert registry for a match on NRN and batch.",
+        description="Search the NAFDAC public-alert registry. Optionally propose a candidate alert_id from the alert corpus; code verifies the proposal against NRN and batch.",
         parameters={"type": "object", "properties": {
             "nrn": {"type": ["string", "null"]},
             "batch": {"type": ["string", "null"]},
             "product": {"type": ["string", "null"]},
+            "alert_id": {"type": ["string", "null"]},
         }},
         handler=_alert_search,
+    ),
+    Tool(
+        name="visual_check",
+        description="Ask a specific yes/no question about the label image, optionally cropped to a box. Use only questions derived from an alert's known differences.",
+        parameters={"type": "object", "properties": {
+            "question": {"type": "string"},
+            "image_id": {"type": "string"},
+            "box": {"type": ["array", "null"], "items": {"type": "number"}},
+        }, "required": ["question"]},
+        handler=_visual_check,
     ),
     Tool(
         name="compare_to_alert",

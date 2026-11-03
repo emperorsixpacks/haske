@@ -104,34 +104,67 @@ class AlertRegistry:
         batch_conf = confusable(batch_norm)
 
         for alert in self._records:
-            if not alert.nrn:
-                continue
-            alert_norm = normalize(alert.nrn)
-            if alert_norm != nrn_norm and confusable(alert_norm) != nrn_conf:
-                continue
-
-            # NRN matches this alert.
-            if not batch_norm:
-                return AlertFinding(kind="KNOWN_TARGET", alert=alert)
-
-            for ex in alert.counterfeit_examples:
-                ex_norm = normalize(ex.batch)
-                if ex_norm == batch_norm:
-                    return AlertFinding(kind="ALERT_MATCH", alert=alert, matched=ex, fuzzy=False)
-                if confusable(ex_norm) == batch_conf:
-                    return AlertFinding(kind="ALERT_MATCH", alert=alert, matched=ex, fuzzy=True)
-                if edit_distance(confusable(ex_norm), batch_conf) <= 1:
-                    return AlertFinding(kind="ALERT_MATCH", alert=alert, matched=ex, fuzzy=True)
-
-            for ex in alert.genuine_examples:
-                ex_norm = normalize(ex.batch)
-                if ex_norm == batch_norm or confusable(ex_norm) == batch_conf:
-                    # The batch matches the alert's genuine reference; the alert does not apply.
-                    return None
-
-            return AlertFinding(kind="KNOWN_TARGET", alert=alert)
-
+            finding = _match_alert(alert, nrn_norm, nrn_conf, batch_norm, batch_conf)
+            if finding is not None:
+                return finding
         return None
+
+    def verify_alert(self, alert_id: str, nrn: str | None, batch: str | None) -> AlertFinding | None:
+        """Verify a model-proposed candidate alert id against the label's NRN and batch.
+
+        Returns the finding only if the alert's NRN and (counterfeit) batch rules actually
+        match. Unverified proposals return None and are discarded by the caller.
+        """
+        alert = next((a for a in self._records if a.id == alert_id), None)
+        if alert is None:
+            return None
+        return _match_alert(alert, normalize(nrn), confusable(normalize(nrn)), normalize(batch), confusable(normalize(batch)))
+
+
+def _match_alert(alert: AlertRecord, nrn_norm: str, nrn_conf: str, batch_norm: str, batch_conf: str) -> AlertFinding | None:
+    """Match one alert against normalized NRN and batch. None means not a counterfeit match."""
+    if not alert.nrn:
+        return None
+    alert_norm = normalize(alert.nrn)
+    if alert_norm != nrn_norm and confusable(alert_norm) != nrn_conf:
+        return None
+
+    if not batch_norm:
+        return AlertFinding(kind="KNOWN_TARGET", alert=alert)
+
+    for ex in alert.counterfeit_examples:
+        ex_norm = normalize(ex.batch)
+        if ex_norm == batch_norm:
+            return AlertFinding(kind="ALERT_MATCH", alert=alert, matched=ex, fuzzy=False)
+        if confusable(ex_norm) == batch_conf:
+            return AlertFinding(kind="ALERT_MATCH", alert=alert, matched=ex, fuzzy=True)
+        if edit_distance(confusable(ex_norm), batch_conf) <= 1:
+            return AlertFinding(kind="ALERT_MATCH", alert=alert, matched=ex, fuzzy=True)
+
+    for ex in alert.genuine_examples:
+        ex_norm = normalize(ex.batch)
+        if ex_norm == batch_norm or confusable(ex_norm) == batch_conf:
+            return None
+
+    return AlertFinding(kind="KNOWN_TARGET", alert=alert)
+
+
+def alert_corpus_text(registry: "AlertRegistry") -> str:
+    """Compact text of all stored alerts for the model's long-context system prompt.
+
+    The model may propose candidate alert ids from this corpus; code verifies with exact
+    and fuzzy NRN and batch rules before anything is shown.
+    """
+    lines = ["NAFDAC public alerts. Propose a candidate alert_id only from this list:"]
+    for a in registry._records:
+        genuine = ", ".join(e.batch for e in a.genuine_examples) or "none listed"
+        counterfeit = ", ".join(((e.label + " ") if e.label else "") + e.batch for e in a.counterfeit_examples) or "none listed"
+        diffs = " | ".join(a.known_differences)
+        lines.append(
+            f"- id={a.id} alert_no={a.alert_no} product={a.product} nrn={a.nrn} "
+            f"genuine_batches={genuine} counterfeit_batches={counterfeit} differences={diffs}"
+        )
+    return "\n".join(lines)
 
 
 def _load_seed() -> list[AlertRecord]:
