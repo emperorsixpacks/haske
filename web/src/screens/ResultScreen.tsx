@@ -259,6 +259,9 @@ export function ResultScreen(props: Props) {
         </div>
       )}
 
+      {/* Signals card: consistency flags + batch conflict */}
+      <SignalsCard result={result} s={s} />
+
       {/* Why this result */}
       <details className="card accordion" open={openWhy} onToggle={(e) => setOpenWhy((e.target as HTMLDetailsElement).open)}>
         <summary>
@@ -333,6 +336,65 @@ function CmpRowView({ row, s }: { row: CmpRow; s: Strings }) {
           {row.sim != null && <div className="step-note">{s.ocrConfidence}: {Math.round(row.sim * 100)}%</div>}
         </div>
       )}
+    </div>
+  );
+}
+
+// Map backend flag codes to i18n string keys.
+const FLAG_LABEL_MAP: Record<string, keyof import("../i18n").Strings> = {
+  EXPIRY_PAST: "signalExpiryPast",
+  EXPIRY_FAR_FUTURE: "signalExpiryFarFuture",
+  MFG_IN_FUTURE: "signalMfgFuture",
+  SHELF_LIFE_MISMATCH: "signalShelfLifeMismatch",
+  BATCH_PATTERN_UNUSUAL: "signalBatchUnusual",
+  BATCH_DATE_CONFLICT: "signalBatchConflict",
+};
+
+function SignalsCard({ result, s }: { result: CheckResponse; s: Strings }) {
+  // Gather signals from the evidence notes.
+  const signalFlags: string[] = [];
+  for (const e of result.verdict.evidence) {
+    const note = e.note || "";
+    // Parse "signals=FLAG1,FLAG2,..." from the evidence note.
+    const sigMatch = note.match(/signals=([^;]+)/);
+    if (sigMatch) {
+      sigMatch[1].split(",").forEach((f) => signalFlags.push(f.trim()));
+    }
+    // Batch conflict is a separate section in the note.
+    if (note.includes("batch_conflict:")) {
+      if (!signalFlags.includes("BATCH_DATE_CONFLICT")) {
+        signalFlags.push("BATCH_DATE_CONFLICT");
+      }
+    }
+  }
+
+  if (signalFlags.length === 0) return null;
+
+  return (
+    <div className="card" style={{ borderColor: "var(--differ-bg)", background: "#FFFBEB" }}>
+      <h2 className="card-title">{s.signalsCardTitle}</h2>
+      <ul style={{ margin: "8px 0 0", paddingLeft: 18 }}>
+        {signalFlags.map((flag) => {
+          const key = FLAG_LABEL_MAP[flag];
+          if (key) {
+            return (
+              <li key={flag} className="disclaimer" style={{ marginBottom: 4 }}>
+                {s[key] as string}
+              </li>
+            );
+          }
+          // Layout flags: "LAYOUT:SPELLING_ERROR:word" -> show the payload
+          if (flag.startsWith("LAYOUT:")) {
+            return (
+              <li key={flag} className="disclaimer" style={{ marginBottom: 4 }}>
+                {s.signalLayoutPrefix}: {flag.replace("LAYOUT:", "")}
+              </li>
+            );
+          }
+          return null;
+        })}
+      </ul>
+      <p className="disclaimer" style={{ marginTop: 8 }}>{s.signalsNotProof}</p>
     </div>
   );
 }

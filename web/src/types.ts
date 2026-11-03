@@ -18,8 +18,10 @@ export interface Extraction {
   manufacturer: string | null;
   strength: string | null;
   category_guess: string | null;
+  shelf_life_months: number | null;
   confidence: FieldConfidence;
   legibility_notes: string[];
+  layout_flags: string[];
 }
 
 export interface FieldComparison {

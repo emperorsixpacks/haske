@@ -80,6 +80,15 @@ export interface Strings {
   batchCardTitle: string;
   batchUnusual: string;
   batchNotProof: string;
+  signalsCardTitle: string;
+  signalsNotProof: string;
+  signalExpiryPast: string;
+  signalExpiryFarFuture: string;
+  signalMfgFuture: string;
+  signalShelfLifeMismatch: string;
+  signalBatchUnusual: string;
+  signalBatchConflict: string;
+  signalLayoutPrefix: string;
   whyResult: string;
   shareWhatsApp: string;
   reportConcern: string;
@@ -227,6 +236,16 @@ const EN: Strings = {
   batchUnusual: "Unusual pattern, not proof",
   batchNotProof:
     "We look for repeated or sequential patterns in the batch code. An unusual pattern is a hint, not proof of anything.",
+  signalsCardTitle: "Signals found",
+  signalsNotProof:
+    "These signals were found on the label. They are worth noting but are not proof of anything on their own.",
+  signalExpiryPast: "Expiry date is in the past.",
+  signalExpiryFarFuture: "Expiry date is unusually far in the future.",
+  signalMfgFuture: "Manufacture date is in the future.",
+  signalShelfLifeMismatch: "Stated shelf life does not match the gap between manufacture and expiry dates.",
+  signalBatchUnusual: "Batch code has an unusual repeated or sequential pattern.",
+  signalBatchConflict: "The expiry date on this label differs from other scans of the same batch code.",
+  signalLayoutPrefix: "Label signal",
   whyResult: "Why this result",
   shareWhatsApp: "Share on WhatsApp",
   reportConcern: "Report a concern",
@@ -365,6 +384,16 @@ const PCM: Strings = {
   save: "Save",
   saved: "Done save",
   disclaimerShort: "If e match, na say label and registry agree. E no mean say the product be original.",
+
+  signalsCardTitle: "Signals we see",
+  signalsNotProof:
+    "These signals dey for the label. Dem worth noting but no be proof of anything.",
+  signalExpiryPast: "Expiry date don pass.",
+  signalExpiryFarFuture: "Expiry date too far for front.",
+  signalMfgFuture: "Manufacture date dey for future.",
+  signalShelfLifeMismatch: "Shelf life no match the dates wey dem print.",
+  signalBatchUnusual: "Batch code get unusual pattern.",
+  signalBatchConflict: "The expiry date no match other scans of same batch.",
 
   alertsTitle: "Alerts",
   alertsEmpty: "No public NAFDAC alert for now. We go show recalls and warnings here when dem publish.",
