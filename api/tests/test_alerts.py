@@ -58,6 +58,38 @@ def test_seed_loaded():
     assert len(reg) >= 2
 
 
+def test_seed_has_16_records_15_unique_alert_nos():
+    import json
+    from api.registries.alerts import _SEED_PATH
+
+    data = json.loads(_SEED_PATH.read_text())["alerts"]
+    assert len(data) == 16
+    assert len({r["alert_no"] for r in data}) == 15
+    assert len({r["id"] for r in data}) == 16
+    for r in data:
+        assert r.get("source_url"), r["id"]
+        assert r.get("quoted_text"), r["id"]
+        assert r.get("known_differences"), r["id"]
+
+
+def test_new_alerts_have_deterministic_findings():
+    reg = get_alert_registry()
+    # Astamocil counterfeit batch (ALERT_MATCH)
+    f = reg.lookup("A4-8681", "826024")
+    assert f is not None and f.kind == "ALERT_MATCH" and f.alert.alert_no == "34/2025"
+    # Astamentin counterfeit batch (ALERT_MATCH)
+    f = reg.lookup("A11-0341", "0501724")
+    assert f is not None and f.kind == "ALERT_MATCH" and f.alert.alert_no == "34/2025"
+    # Proguanil counterfeit batch (ALERT_MATCH)
+    f = reg.lookup("04-6433", "BN600")
+    assert f is not None and f.kind == "ALERT_MATCH"
+    # Proguanil unknown batch (KNOWN_TARGET)
+    f = reg.lookup("04-6433", "ZZZZZZ")
+    assert f is not None and f.kind == "KNOWN_TARGET"
+    # Augmentin has no NRN, so no deterministic match
+    assert reg.lookup("AC3N", "AC3N") is None
+
+
 def test_postinor_counterfeit_type1_matches():
     f = get_alert_registry().lookup("04-6985", "T36184B")
     assert f is not None

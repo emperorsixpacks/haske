@@ -36,6 +36,257 @@
       ],
       "quoted_text": "Alert on the seizure of suspected substandard and falsified BPPL Artemether/Lumefantrine 80mg/480mg.",
       "source_url": "https://nafdac.gov.ng/public-alert-no-042-2026-alert-on-the-seizure-of-suspected-substandard-and-falsified-bppl-artemether-lumefantrine-80mg-480mg/"
+    },
+    {
+      "id": "nafdac-05-2025-cikatem-a11-100025",
+      "alert_no": "05/2025",
+      "date": "2025-03-11",
+      "product": "Cikatem (Artemether/Lumefantrine 180mg/1080mg)",
+      "nrn": "A11-100025",
+      "genuine_examples": [],
+      "counterfeit_examples": [
+        { "batch": "ALS063", "mfg": "10/2024", "exp": "09/2027" }
+      ],
+      "known_differences": [
+        "Falsified NAFDAC registration number A11-100025."
+      ],
+      "quoted_text": "Alert on the circulation of falsified Cikatem Artemether 180mg/Lumefantrine 1080mg with falsified NAFDAC Registration Number (NRN) A11-100025.",
+      "source_url": "https://nafdac.gov.ng/public-alert-no-05-2025-alert-on-the-circulation-of-falsified-cikatem-artemether-180mg-lumefantrine-1080mg-with-falsified-nafdac-registration-number-nrn-a11-100025/"
+    },
+    {
+      "id": "nafdac-16-2025-rosprazole-c4-0150",
+      "alert_no": "16/2025",
+      "date": "2025-05-31",
+      "product": "Rosprazole (Rabeprazole) Injection 20mg",
+      "nrn": "C4-0150",
+      "genuine_examples": [],
+      "counterfeit_examples": [
+        { "batch": "PLED23108", "mfg": "12/2023", "exp": "11/2026" }
+      ],
+      "known_differences": [
+        "The NAFDAC registration number C4-0150 is registered to Amlodipine tablet Amlodipine Besilate."
+      ],
+      "quoted_text": "Alert on counterfeit/falsified Rosprazole (Rabeprazole) Injection 20mg.",
+      "source_url": "https://nafdac.gov.ng/public-alert-no-16-2025-alert-on-counterfeit-falsified-rosprazole-rabeprazole-injection-20mg/"
+    },
+    {
+      "id": "nafdac-37-2025-betaclox-a4-4724",
+      "alert_no": "37/2025",
+      "date": "2025-11-04",
+      "product": "BETACLOX (Ampicillin + Cloxacillin)",
+      "nrn": "A4-4724",
+      "genuine_examples": [],
+      "counterfeit_examples": [
+        { "batch": "230701", "mfg": "07/2023", "exp": "07/2026" }
+      ],
+      "known_differences": [
+        "The NAFDAC registration number A4-4724 belongs to Mebendazole 500mg Chi Ltd.",
+        "The address No. 128 MCC Road, Calabar differs from PCN Freeview Pharmaceutical Ltd at No. 101 MCC Road, Calabar."
+      ],
+      "quoted_text": "Alert on the report of substandard and falsified SF Betaclox found in Nigeria.",
+      "source_url": "https://nafdac.gov.ng/public-alert-no-37-2025-alert-on-the-report-of-substandard-and-falsified-sf-betaclox-found-in-nigeria/"
+    },
+    {
+      "id": "nafdac-023-2026-proguanil-04-6433",
+      "alert_no": "023/2026",
+      "date": "2026-03-25",
+      "product": "Proguanil (Projeanil, Re-granil) tablet BP 100mg",
+      "nrn": "04-6433",
+      "genuine_examples": [],
+      "counterfeit_examples": [
+        { "batch": "BN600", "mfg": "08/2024", "exp": "09/2028" },
+        { "batch": "BN600", "mfg": "08/2022", "exp": "09/2027" }
+      ],
+      "known_differences": [
+        "The NAFDAC registration number 04-6433 belongs to Feroglobin B12 Capsules Vitabiotics Nigeria.",
+        "Apple King Industry PVT New Delhi.",
+        "Jamila Export."
+      ],
+      "quoted_text": "Alert on counterfeit brands of Proguanil (Projeanil and Re-granil) tablet BP 100mg with fake NAFDAC registration number 04-6433 found in Nigeria.",
+      "source_url": "https://nafdac.gov.ng/public-alert-no-023-2026-alert-on-counterfeit-brands-of-proguanil-projeanil-and-re-granil-tablet-b-p-100mg-with-fake-nafdac-registration-number-04-6433-found-in-nigeria/"
+    },
+    {
+      "id": "nafdac-028-2025-oxytocin-a4-9566",
+      "alert_no": "028/2025",
+      "date": "2025-08-25",
+      "product": "Gold Vision Oxytocin Injection 10IU",
+      "nrn": "A4-9566",
+      "genuine_examples": [],
+      "counterfeit_examples": [
+        { "label": "Unregistered pack", "batch": "", "mfg": "", "exp": "" }
+      ],
+      "known_differences": [
+        "Not in the NAFDAC database.",
+        "Anhui Hongye Pharmaceutical Co. Ltd, Bengbu, Anhui, China.",
+        "Marketer: Gold Vision Medicals, Enugu.",
+        "In 2023, RBPMS falsified A-tocin, Extocin and Claxitodin share the same fake NRN A4-9566."
+      ],
+      "quoted_text": "Alert on unregistered falsified Oxytocin injection.",
+      "source_url": "https://nafdac.gov.ng/public-alert-no-028-2025-alert-on-unregistered-falsified-oxytocin-injection/"
+    },
+    {
+      "id": "nafdac-016-2024-asian-ampicillin-cloxacillin-a4-8255",
+      "alert_no": "016/2024",
+      "date": "2024-05-13",
+      "product": "Asian Ampicillin/Cloxacillin Oral Suspension",
+      "nrn": "A4-8255",
+      "genuine_examples": [],
+      "counterfeit_examples": [
+        { "batch": "001" }
+      ],
+      "known_differences": [
+        "The NAFDAC registration number A4-8255 belongs to Zarcef-S 1500, Shrezar Healthcare Nigeria Ltd."
+      ],
+      "quoted_text": "Illegal distribution and sale of substandard and falsified SF Asian Ampicillin/Cloxacillin Oral Suspension.",
+      "source_url": "https://nafdac.gov.ng/public-alert-no-016-2024-illegal-distribution-and-sale-of-substandard-and-falsified-sf-asian-ampicillin-cloxacillin-oral-suspension/"
+    },
+    {
+      "id": "nafdac-06-2026-sma-gold-b1-2783",
+      "alert_no": "06/2026",
+      "date": "2026-02-12",
+      "product": "SMA Gold Infant Formula 900g",
+      "nrn": "B1-2783",
+      "genuine_examples": [],
+      "counterfeit_examples": [
+        { "batch": "22939510A1206", "mfg": "20-1-2025", "exp": "20-1-2027" }
+      ],
+      "known_differences": [
+        "Date-marking alteration on the top preprinted sticker.",
+        "Found in Kaduna."
+      ],
+      "quoted_text": "Alert on revalidated infant formula SMA Gold found on sale.",
+      "source_url": "https://nafdac.gov.ng/public-alert-no-06-2026-alert-on-revalidated-infant-formula-sma-gold-found-on-sale/"
+    },
+    {
+      "id": "nafdac-010-2025-wonder-calcium-04-1029",
+      "alert_no": "010/2025",
+      "date": "2025-04-14",
+      "product": "Wonder Calcium (Health and Hygiene)",
+      "nrn": "04-1029",
+      "genuine_examples": [],
+      "counterfeit_examples": [
+        { "label": "Fake pack", "batch": "" }
+      ],
+      "known_differences": [
+        "The NAFDAC registration number 04-1029 is fake.",
+        "Complaint by Asad Pharmaceutical Ltd.",
+        "Atiku Abubakar Plaza, International Trade Fair Complex, Badagry Expressway, Lagos.",
+        "Distributor apprehended in Asaba, Delta State."
+      ],
+      "quoted_text": "Alert on the sale of a fake product named Wonder Calcium by Health and Hygiene.",
+      "source_url": "https://nafdac.gov.ng/public-alert-no-010-2025-alert-on-the-sale-of-a-fake-product-named-wonder-calcium-by-health-and-hygiene/"
+    },
+    {
+      "id": "nafdac-024-2026-augmentin-ac3n",
+      "alert_no": "024/2026",
+      "date": "2026-04-30",
+      "product": "Augmentin 625mg tablets",
+      "nrn": null,
+      "genuine_examples": [],
+      "counterfeit_examples": [
+        { "batch": "AC3N", "mfg": "09/2025", "exp": "09/2028" }
+      ],
+      "known_differences": [
+        "Genuine product manufactured by GSK Worthing on 23 Aug 2023.",
+        "Batch AC3N is not registered with NAFDAC."
+      ],
+      "quoted_text": "Alert on counterfeit Augmentin 625mg tablets batch no AC3N in Nigeria.",
+      "source_url": "https://nafdac.gov.ng/public-alert-no-024-2026-alert-on-counterfeit-augmentin-625mg-tablets-batch-no-ac3n-in-nigeria/"
+    },
+    {
+      "id": "nafdac-01-2026-tavanic-4mw4c",
+      "alert_no": "01/2026",
+      "date": "2026-01-08",
+      "product": "Tavanic 500mg tablets",
+      "nrn": null,
+      "genuine_examples": [
+        { "batch": "2PK3C", "exp": "07/2025" }
+      ],
+      "counterfeit_examples": [
+        { "batch": "4MW4C", "mfg": "05/2024", "exp": "04/2027" }
+      ],
+      "known_differences": [
+        "Relabelled from expired batch 2PK3C exp July 2025.",
+        "Removable sticker on the inner blisters.",
+        "MAS/Mpdigree discrepancies.",
+        "Idumota open drug market, Lagos."
+      ],
+      "quoted_text": "Sale of falsified Tavanic 500mg tablet in Nigeria.",
+      "source_url": "https://nafdac.gov.ng/public-alert-no-01-2026-sale-of-falsified-tavanic-500mg-tablet-in-nigeria/"
+    },
+    {
+      "id": "nafdac-34-2025-astamocil-a4-8681",
+      "alert_no": "34/2025",
+      "date": "2025-10-22",
+      "product": "Astamocil (Amoxicillin suspension 125mg/5ml)",
+      "nrn": "A4-8681",
+      "genuine_examples": [],
+      "counterfeit_examples": [
+        { "batch": "826024" }
+      ],
+      "known_differences": [
+        "Substandard with low active pharmaceutical ingredient.",
+        "Sam-Ace Ltd.",
+        "PMS Kano CWC."
+      ],
+      "quoted_text": "Substandard Astamocil (Amoxicillin suspension 125mg/5ml) batch no 826024 and Astamentin (Amoxicillin clavulanic acid suspension) batch nos 0503024, 0501724.",
+      "source_url": "https://nafdac.gov.ng/public-alert-no-34-2025-substandard-astamocil-amoxicillin-suspension-125mg-5ml-batch-no-826024-and-astamentin-amoxicillin-clavulanic-acid-suspension-batch-nos-0503024-0501724/"
+    },
+    {
+      "id": "nafdac-34-2025-astamentin-a11-0341",
+      "alert_no": "34/2025",
+      "date": "2025-10-22",
+      "product": "Astamentin (Amoxicillin/Clavulanic acid suspension)",
+      "nrn": "A11-0341",
+      "genuine_examples": [],
+      "counterfeit_examples": [
+        { "batch": "0501724" },
+        { "batch": "0503024" }
+      ],
+      "known_differences": [
+        "Substandard with low active pharmaceutical ingredient.",
+        "Sam-Ace Ltd.",
+        "PMS Kano CWC."
+      ],
+      "quoted_text": "Substandard Astamocil (Amoxicillin suspension 125mg/5ml) batch no 826024 and Astamentin (Amoxicillin clavulanic acid suspension) batch nos 0503024, 0501724.",
+      "source_url": "https://nafdac.gov.ng/public-alert-no-34-2025-substandard-astamocil-amoxicillin-suspension-125mg-5ml-batch-no-826024-and-astamentin-amoxicillin-clavulanic-acid-suspension-batch-nos-0503024-0501724/"
+    },
+    {
+      "id": "nafdac-21-2025-tarivid-al016",
+      "alert_no": "21/2025",
+      "date": "2025-06-10",
+      "product": "Tarivid (Ofloxacin) 200mg tablets",
+      "nrn": "AL016",
+      "genuine_examples": [],
+      "counterfeit_examples": [
+        { "label": "Unregistered pack", "batch": "", "mfg": "09/2023", "exp": "08/2028" }
+      ],
+      "known_differences": [
+        "Batch is unregistered.",
+        "Sanofi AFIT confirmed the product was intended for the Pakistan market.",
+        "Onipan, Shomolu LGA, Lagos."
+      ],
+      "quoted_text": "Alert on the report of unregistered Tarivid (Ofloxacin) 200mg found in Nigeria.",
+      "source_url": "https://nafdac.gov.ng/public-alert-no-21-2025-alert-on-the-report-of-unregistered-tarivid-ofloxacin-200mg-found-in-nigeria/"
+    },
+    {
+      "id": "nafdac-02-2025-knowit-syringe-03-2933",
+      "alert_no": "02/2025",
+      "date": "2025-02-28",
+      "product": "Knowit Insulin Syringe 40 IU 29G x 1/2",
+      "nrn": "03-2933",
+      "genuine_examples": [],
+      "counterfeit_examples": [
+        { "label": "SF pack", "batch": "", "mfg": "2020.08", "exp": "2025.08" }
+      ],
+      "known_differences": [
+        "License expired in 2019.",
+        "Risk of dosing errors when used with 100 IU/ml insulin.",
+        "Distributor: Chivic Limited.",
+        "Raised by ACPN."
+      ],
+      "quoted_text": "Illegal distribution and sale of substandard and falsified SF Knowit Insulin Syringe 40 IU 29G x 1/2.",
+      "source_url": "https://nafdac.gov.ng/public-alert-no-02-2025-illegal-distribution-and-sale-of-substandard-and-falsified-sf-knowit-insulin-syringe-40-iu-29g-x-1-2/"
     }
   ]
 }
