@@ -39,6 +39,13 @@ class Settings(BaseSettings):
     # Format: {"02-4139": {"product_name": "...", "manufacturer": "...", ...}, ...}
     napams_cache_path: Path | None = None
 
+    # Optional proxy for the NAPAMS Playwright browser (bypasses datacenter reCAPTCHA).
+    # URL forms: http://host:port, http://user:pass@host:port, socks5://host:port.
+    # Username/password may also be given separately when the URL has no credentials.
+    napams_proxy_url: str | None = None
+    napams_proxy_username: str | None = None
+    napams_proxy_password: str | None = None
+
     # Politeness knobs.
     request_delay_seconds: float = 2.0
     request_timeout_seconds: float = 30.0

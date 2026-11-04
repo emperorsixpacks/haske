@@ -135,7 +135,10 @@ survives any agent failure.
   `_FIELD_KEYS` in `api/registries/greenbook.py`.
 - NAPAMS (`registration.nafdac.gov.ng`) verify form POSTs `/Home/VerifyProduct` with input
   `CertificateNumber`, but is behind an invisible reCAPTCHA that silently blocks headless /
-  datacenter IPs (returns `recaptcha_blocked`). Response parsing is `parse_verify_text` in
+  datacenter IPs (returns `recaptcha_blocked`). Set `NAPAMS_PROXY_URL` (+ optional
+  `NAPAMS_PROXY_USERNAME`/`NAPAMS_PROXY_PASSWORD`) in `.env` to route Playwright through a
+  residential proxy (forms `http://host:port`, `http://user:pass@host:port`, `socks5://host:port`;
+  `NapamsClient._proxy_config()`). Response parsing is `parse_verify_text` in
   `api/registries/napams.py`. Cosmetics/soaps route to NAPAMS, not a "no source" fallback.
 - NRN normaliser (`api/registries/nrn.py`): 12-13 digit strings are barcodes, rejected; `O`
   vs `0` ambiguity is flagged, never guessed.

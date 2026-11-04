@@ -32,6 +32,33 @@ def test_napams_invalid_nrn_is_incomplete_not_not_found():
     assert result.reason.startswith("invalid_nrn")
 
 
+def test_napams_proxy_config_absent_by_default():
+    assert NapamsClient(Settings())._proxy_config() is None
+
+
+def test_napams_proxy_config_server_only():
+    settings = Settings(napams_proxy_url="http://127.0.0.1:8080")
+    assert NapamsClient(settings)._proxy_config() == {"server": "http://127.0.0.1:8080"}
+
+
+def test_napams_proxy_config_with_credentials():
+    settings = Settings(
+        napams_proxy_url="http://127.0.0.1:8080",
+        napams_proxy_username="user",
+        napams_proxy_password="pass",
+    )
+    assert NapamsClient(settings)._proxy_config() == {
+        "server": "http://127.0.0.1:8080",
+        "username": "user",
+        "password": "pass",
+    }
+
+
+def test_napams_proxy_config_blank_url_is_none():
+    settings = Settings(napams_proxy_url="   ")
+    assert NapamsClient(settings)._proxy_config() is None
+
+
 def test_router_routes_categories():
     fake = FakeNapamsClient({})
     router = RegistryRouter(greenbook=fake, napams=fake)

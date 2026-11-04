@@ -83,7 +83,11 @@ as the build proceeds. Andrew reviews this to know what was verified vs assumed.
   headless/datacenter IP (no token issued, no navigation, no challenge). The client reports
   CHECK_INCOMPLETE("recaptcha_blocked"). On a real residential browser reCAPTCHA auto-passes
   (that is how Andrew captured the Nivea response), so this path would work if the lookup ran
-  from a residential IP or a real browser context - not yet arranged for milestone 1.
+  from a residential IP or a real browser context. Proxy support is now wired:
+  `NAPAMS_PROXY_URL` / `NAPAMS_PROXY_USERNAME` / `NAPAMS_PROXY_PASSWORD` in `.env` are passed
+  to Playwright's `chromium.launch(proxy=...)` (`http://host:port`, `http://user:pass@host:port`
+  or `socks5://host:port`). A residential/mobile proxy on that IP is the intended bypass; still
+  untested end to end against the live portal.
 - Greenbook `manufacturer`: the search feed exposes only `manufacturer_id`, not a name, so
   the snapshot's `manufacturer` is None. Enriching it would require the `/manufacturers`
   list or per-product `/products/details/{id}` pages (not done in milestone 1).

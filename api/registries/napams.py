@@ -61,6 +61,20 @@ class NapamsClient(RegistryClient):
         self.settings = settings
         self.timeout_ms = timeout_ms
 
+    def _proxy_config(self) -> dict | None:
+        """Build a Playwright launch proxy dict from settings, or None when unused."""
+        url = (self.settings.napams_proxy_url or "").strip()
+        if not url:
+            return None
+        proxy: dict = {"server": url}
+        username = self.settings.napams_proxy_username
+        password = self.settings.napams_proxy_password
+        if username:
+            proxy["username"] = username
+        if password:
+            proxy["password"] = password
+        return proxy
+
     def lookup(self, nrn: str, category: RegistryCategory | None = None) -> LookupResult:
         norm = normalise_nrn(nrn)
         if not norm.valid:
@@ -79,7 +93,7 @@ class NapamsClient(RegistryClient):
 
         try:
             with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True)
+                browser = p.chromium.launch(headless=True, proxy=self._proxy_config())
                 try:
                     page = browser.new_page()
                     page.set_default_timeout(self.timeout_ms)
